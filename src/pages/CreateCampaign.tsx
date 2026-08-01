@@ -7,7 +7,6 @@ export default function CreateCampaign() {
   const [clickLink, setClickLink] = useState('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -28,7 +27,6 @@ export default function CreateCampaign() {
 
   const fetchCampaigns = async () => {
     setLoading(true);
-    setError(null);
     
     // Get the user's first active campaign
     const { data: { user } } = await supabase.auth.getUser();
@@ -44,7 +42,6 @@ export default function CreateCampaign() {
 
     if (error && error.code !== 'PGRST116') {
       console.error("Error fetching campaign:", error);
-      setError("Error connecting to database.");
       setLoading(false);
       return;
     }
@@ -59,7 +56,7 @@ export default function CreateCampaign() {
     setLoading(false);
   };
 
-  const generateTrackingScript = (campId: string, campName: string) => {
+  const generateTrackingScript = (_campId: string, campName: string) => {
     return `
 <!-- Findora Tracking Pixel for ${campName} -->
 <script>
