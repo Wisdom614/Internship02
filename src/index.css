@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-findora-gray text-slate-800 font-sans;
+  }
+}
+
+@layer components {
+  .metric-card {
+    @apply bg-white rounded-xl shadow-sm p-6 border border-slate-100 hover:shadow-md transition-shadow;
+  }
+  .chart-container {
+    @apply bg-white rounded-xl shadow-sm p-6 border border-slate-100;
+  }
+}
+
+/* Supabase Auth Customizations */
+.auth-container {
+  @apply w-full;
+}
+.auth-button {
+  @apply w-full bg-findora-purple text-white py-2.5 rounded-lg font-medium hover:bg-findora-purple/90 transition-colors mb-3 !important;
+}
+.auth-input {
+  @apply w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-findora-purple/20 focus:border-findora-purple mb-3 !important;
+}
+.auth-label {
+  @apply block text-sm font-medium text-slate-700 mb-1 !important;
+}
+.auth-message {
+  @apply text-sm text-red-600 mt-1 !important;
+}
