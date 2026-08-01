@@ -1,34 +1,19 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-Deno.serve(async (req) => {
+const url = Deno.env.get('SUPABASE_URL')!;
+const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
+
+Deno.serve(async req => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   try {
-    const { click_id, duration_seconds } = await req.json();
-    
-    if (!click_id) {
-      return new Response('Missing click_id', { status: 400 });
-    }
-
-    const supabase = createClient(
-      'https://kdncxluglavhsygdxmio.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkbmN4bHVnbGF2aHN5Z2R4bWlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NTAwNTUsImV4cCI6MjEwMTEyNjA1NX0.r276oG2aY2ZhFuBZgn3clgcbhMK7IYURDiaMQk-HMLM'
-    );
-
-    // Update the page_views record with the duration
-    // Since we don't know the exact page_view ID, we'll just update the latest one for this click_id
-    const { error } = await supabase
-      .from('page_views')
-      .update({ duration_seconds: duration_seconds })
-      .eq('click_id', click_id)
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    if (error) {
-      console.error(error);
-      return new Response('Error saving duration', { status: 500 });
-    }
-
-    return new Response('Duration tracked!', { status: 200 });
-  } catch (error) {
-    return new Response('Invalid request', { status: 400 });
-  }
+    const { click_id, session_id, duration_seconds } = await req.json();
+    if (!click_id || !session_id) return new Response('Missing tracking data', { status: 400, headers: cors });
+    const client = createClient(url, key);
+    const { data: pageView } = await client.from('page_views').select('id').eq('click_id', click_id).eq('session_id', session_id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (!pageView) return new Response('Page view not found', { status: 404, headers: cors });
+    const { error } = await client.from('page_views').update({ duration_seconds: Math.max(0, Math.min(Number(duration_seconds) || 0, 86400)) }).eq('id', pageView.id);
+    if (error) throw error;
+    return new Response(null, { status: 204, headers: cors });
+  } catch (error) { console.error(error); return new Response('Unable to record engagement', { status: 400, headers: cors }); }
 });

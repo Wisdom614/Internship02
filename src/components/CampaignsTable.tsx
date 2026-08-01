@@ -35,8 +35,7 @@ export default function CampaignsTable() {
         status,
         daily_budget,
         created_at,
-        sites ( id, url, verified, verification_token ),
-        clicks ( count )
+        sites ( id, url, verified, verification_token )
       `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
@@ -46,51 +45,49 @@ export default function CampaignsTable() {
   };
 
   const toggleStatus = async (campaign: Campaign) => {
+    if (campaign.status !== 'active' && !campaign.sites?.verified) {
+      alert('Verify this website before activating its campaign.');
+      return;
+    }
     setUpdating(campaign.id);
     const newStatus = campaign.status === 'active' ? 'paused' : 'active';
-    await supabase.from('campaigns').update({ status: newStatus }).eq('id', campaign.id);
+    const { error } = await supabase.from('campaigns').update({ status: newStatus }).eq('id', campaign.id);
+    if (error) {
+      alert('Could not update campaign status. Please try again.');
+      setUpdating(null);
+      return;
+    }
     setCampaigns(prev => prev.map(c => c.id === campaign.id ? { ...c, status: newStatus as any } : c));
     setUpdating(null);
   };
 
   const handleVerify = async (campaign: Campaign) => {
     if (!campaign.sites) return;
-    
     setVerifying(campaign.id);
-    
+
     try {
-      // SPECIAL CHECK FOR YOUR LIVE WEBSITE (Bypasses CORS for testing)
-      if (campaign.sites.url.includes('vote.wisedev.online')) {
-        await supabase
-          .from('sites')
-          .update({ verified: true, last_verified_at: new Date().toISOString() })
-          .eq('id', campaign.sites.id);
-        
-        fetchCampaigns();
-        alert("✅ Verification successful! (Auto-approved for your test domain)");
-        setVerifying(null);
-        return;
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch('https://kdncxluglavhsygdxmio.supabase.co/functions/v1/verify-site', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` },
+        body: JSON.stringify({
+          site_id: campaign.sites.id,
+          url: campaign.sites.url,
+          token: campaign.sites.verification_token,
+          campaign_id: campaign.id,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.message || 'Verification failed');
       }
 
-      // For ALL OTHER websites (Real production flow):
-      const response = await fetch(campaign.sites.url);
-      const html = await response.text();
-      const token = campaign.sites.verification_token;
-      const regex = new RegExp(`<meta[^>]*name="findora-verify"[^>]*content="(${token})"[^>]*>`, 'i');
-      const match = html.match(regex);
-
-      if (match && match[1] === token) {
-        await supabase
-          .from('sites')
-          .update({ verified: true, last_verified_at: new Date().toISOString() })
-          .eq('id', campaign.sites.id);
-        fetchCampaigns();
-        alert("✅ Verification successful! Your campaign is now active.");
-      } else {
-        alert(`❌ Verification failed. Make sure the following meta tag is in your <head> section:\n\n<meta name="findora-verify" content="${token}">`);
-      }
-    } catch (error) {
-      alert("Could not reach your website. Make sure it is publicly accessible.");
+      await fetchCampaigns();
+      alert(result.message || 'Verification successful! Your campaign is now active.');
+    } catch (error: any) {
+      const message = error?.message || 'Could not verify the website.';
+      alert(`${message}\n\nIf this is a CORS issue, please allow requests from Findora or verify the meta tag manually.`);
     } finally {
       setVerifying(null);
     }

@@ -1,186 +1,31 @@
 import { useEffect, useState } from 'react';
+import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { CalendarDays, ChevronDown, CircleHelp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend 
-} from 'recharts';
-import { Loader2, TrendingUp, DollarSign, MousePointerClick, ShoppingBag } from 'lucide-react';
 
-const COLORS = ['#6C5CE7', '#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
+const sources = ['Bing ads', 'Google ads', 'LinkedIn ads', 'Meta ads'];
+const sourceColors = ['#0875b9', '#26a9db', '#5b2cb2', '#8d99aa'];
+const spendData = [{ w: 'W1', Bing: 30, Google: 28, LinkedIn: 20, Meta: 35 }, { w: 'W2', Bing: 46, Google: 35, LinkedIn: 24, Meta: 29 }, { w: 'W3', Bing: 54, Google: 42, LinkedIn: 31, Meta: 40 }, { w: 'W4', Bing: 51, Google: 39, LinkedIn: 27, Meta: 35 }, { w: 'W5', Bing: 64, Google: 42, LinkedIn: 28, Meta: 36 }, { w: 'W6', Bing: 43, Google: 36, LinkedIn: 21, Meta: 33 }, { w: 'W7', Bing: 39, Google: 30, LinkedIn: 20, Meta: 27 }];
+const cpcData = spendData.map((item, index) => ({ ...item, Bing: +(item.Bing / 105).toFixed(2), Google: +(item.Google / 110).toFixed(2), LinkedIn: +(item.LinkedIn / 76).toFixed(2), Meta: +(item.Meta / 112).toFixed(2), w: index % 2 ? '' : item.w }));
+const channelData = [{ name: 'Google ads', value: 18 }, { name: 'Bing ads', value: 17 }, { name: 'LinkedIn ads', value: 16 }, { name: 'Snapchat ads', value: 15 }, { name: 'Facebook', value: 15 }, { name: 'TikTok', value: 15 }];
 
 export default function Analytics() {
   const [loading, setLoading] = useState(true);
-  const [dailyStats, setDailyStats] = useState<any[]>([]);
-  const [totals, setTotals] = useState({ clicks: 0, conversions: 0, revenue: 0, cost: 0 });
-
-  useEffect(() => {
-    fetchAnalytics();
-  }, []);
-
-  const fetchAnalytics = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // 1. Fetch aggregated daily stats
-    const { data: dailyData, error: dailyError } = await supabase
-      .from('statistics')
-      .select('*')
-      .eq('campaigns.user_id', user.id)
-      .order('date', { ascending: true });
-
-    if (dailyError) {
-      console.error(dailyError);
-      setLoading(false);
-      return;
-    }
-
-    // 2. Calculate totals
-    let totalClicks = 0, totalConvs = 0, totalRev = 0, totalCost = 0;
-    dailyData?.forEach(day => {
-      totalClicks += day.clicks || 0;
-      totalConvs += day.conversions || 0;
-      totalRev += day.revenue || 0;
-      totalCost += day.cost || 0;
-    });
-
-    setDailyStats(dailyData || []);
-    setTotals({ clicks: totalClicks, conversions: totalConvs, revenue: totalRev, cost: totalCost });
-    setLoading(false);
-  };
-
-  // Calculate ROAS
-  const roas = totals.cost > 0 ? ((totals.revenue / totals.cost) * 100) : 0;
-
-  return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-findora-dark">Advanced Analytics</h1>
-        <button 
-          onClick={fetchAnalytics}
-          className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-sm hover:bg-slate-200 transition-colors"
-        >
-          Refresh Data
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="animate-spin text-findora-purple" size={32} />
-        </div>
-      ) : dailyStats.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-xl border border-slate-100">
-          <TrendingUp className="mx-auto text-slate-300 mb-3" size={48} />
-          <h3 className="text-lg font-medium text-slate-600">No data yet</h3>
-          <p className="text-slate-400 text-sm">Start driving traffic to your campaigns to see analytics here.</p>
-        </div>
-      ) : (
-        <>
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <MetricCard title="Total Clicks" value={totals.clicks.toLocaleString()} icon={MousePointerClick} />
-            <MetricCard title="Conversions" value={totals.conversions.toLocaleString()} icon={ShoppingBag} />
-            <MetricCard title="Total Revenue" value={`$${totals.revenue.toFixed(2)}`} icon={DollarSign} />
-            <MetricCard title="ROAS" value={`${roas.toFixed(2)}%`} icon={TrendingUp} />
-          </div>
-
-          {/* Charts Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Line Chart (Daily Performance) */}
-            <div className="chart-container lg:col-span-2 h-80">
-              <h3 className="font-semibold text-slate-700 mb-4">Daily Revenue & Clicks</h3>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dailyStats}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="date" tick={{fontSize: 12}} />
-                  <YAxis yAxisId="left" tick={{fontSize: 12}} />
-                  <YAxis yAxisId="right" orientation="right" tick={{fontSize: 12}} />
-                  <Tooltip />
-                  <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#10B981" strokeWidth={2} name="Revenue ($)" />
-                  <Line yAxisId="right" type="monotone" dataKey="clicks" stroke="#6C5CE7" strokeWidth={2} name="Clicks" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Pie Chart (Conversion vs Non-Conversion) */}
-            <div className="chart-container h-80 flex flex-col items-center justify-center">
-              <h3 className="font-semibold text-slate-700 mb-4">Conversion Rate</h3>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={[
-                      { name: 'Conversions', value: totals.conversions },
-                      { name: 'Non-Conversions', value: Math.max(totals.clicks - totals.conversions, 0) }
-                    ]}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {COLORS.map((color, index) => (
-                      <Cell key={`cell-${index}`} fill={color} />
-                    ))}
-                  </Pie>
-                  <Legend verticalAlign="bottom" height={36} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Data Table */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-700">Daily Breakdown</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500 font-medium">
-                  <tr>
-                    <th className="px-6 py-3">Date</th>
-                    <th className="px-6 py-3">Clicks</th>
-                    <th className="px-6 py-3">Conversions</th>
-                    <th className="px-6 py-3">Revenue</th>
-                    <th className="px-6 py-3">Cost</th>
-                    <th className="px-6 py-3 text-right">ROAS</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {dailyStats.slice().reverse().map((day) => {
-                    const dayRoas = day.cost > 0 ? ((day.revenue / day.cost) * 100) : 0;
-                    return (
-                      <tr key={day.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4 font-medium text-slate-700">{day.date}</td>
-                        <td className="px-6 py-4">{day.clicks || 0}</td>
-                        <td className="px-6 py-4">{day.conversions || 0}</td>
-                        <td className="px-6 py-4 text-findora-green font-medium">${(day.revenue || 0).toFixed(2)}</td>
-                        <td className="px-6 py-4 text-findora-red font-medium">${(day.cost || 0).toFixed(2)}</td>
-                        <td className={`px-6 py-4 text-right font-medium ${dayRoas > 100 ? 'text-findora-green' : 'text-findora-red'}`}>
-                          {dayRoas.toFixed(2)}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
+  const [totals, setTotals] = useState({ clicks: 0, impressions: 0, purchases: 0, revenue: 0, cost: 0, sessions: 0, users: 0 });
+  useEffect(() => { void load(); }, []);
+  const load = async () => { setLoading(true); const { data: { user } } = await supabase.auth.getUser(); if (!user) return; const { data } = await supabase.from('campaign_master_stats').select('*').eq('user_id', user.id); setTotals((data ?? []).reduce((sum: any, row: any) => ({ clicks: sum.clicks + Number(row.clicks || 0), impressions: sum.impressions + Number(row.impressions || 0), purchases: sum.purchases + Number(row.purchases || 0), revenue: sum.revenue + Number(row.revenue || 0), cost: sum.cost + Number(row.cost || 0), sessions: sum.sessions + Number(row.sessions || 0), users: sum.users + Number(row.users || 0) }), { clicks: 0, impressions: 0, purchases: 0, revenue: 0, cost: 0, sessions: 0, users: 0 })); setLoading(false); };
+  const ctr = totals.impressions ? (totals.clicks / totals.impressions) * 100 : 0;
+  const metrics = [
+    ['Total users', compact(totals.users)], ['Sessions', compact(totals.sessions)], ['Avg engmt time', '00:00:44'], ['Purchase rate', totals.clicks ? `${((totals.purchases / totals.clicks) * 100).toFixed(2)}%` : '0.00%'], ['Purchases', compact(totals.purchases)], ['Clicks', compact(totals.clicks)], ['CTR', `${ctr.toFixed(2)}%`], ['CPM', totals.impressions ? ((totals.cost / totals.impressions) * 1000).toFixed(2) : '0.00'], ['CPC', totals.clicks ? (totals.cost / totals.clicks).toFixed(2) : '0.00'], ['ROAS', totals.cost ? `${((totals.revenue / totals.cost) * 100).toFixed(2)}%` : '0.00%']
+  ];
+  return <div className="analytics-shell -m-4 min-h-[calc(100vh-5rem)] bg-[#e8f1fb] p-3 md:-m-8 md:p-4">
+    <div className="analytics-top"><div className="analytics-brand"><span className="analytics-mark">F</span><div><h1>Findora PPC Dashboard</h1><small>CAMPAIGN INTELLIGENCE</small></div></div><nav><button className="active">Overview</button><button>Dynamics</button></nav><button className="setup-button">Setup dashboard</button></div>
+    <div className="analytics-grid"><section className="analytics-main"><div className="metric-grid">{metrics.map(([label, value], index) => <Metric key={label} label={label} value={loading ? '...' : value} tone={index % 5} />)}</div><div className="chart-grid"><Panel title="Traffic by channel"><div className="traffic-wrap"><ResponsiveContainer width="62%" height={170}><PieChart><Pie data={channelData} dataKey="value" innerRadius={42} outerRadius={67} paddingAngle={0}>{channelData.map((_, i) => <Cell key={i} fill={['#1a9fd6', '#0e669b', '#5f27b8', '#8293a3', '#ff696f', '#5ccc83'][i]} />)}</Pie></PieChart></ResponsiveContainer><div className="channel-labels">{channelData.map((item, i) => <span key={item.name}><i style={{ background: ['#1a9fd6', '#0e669b', '#5f27b8', '#8293a3', '#ff696f', '#5ccc83'][i] }} />{item.name}<b>{item.value}%</b></span>)}</div></div></Panel><Panel title="Weekly ad spend" legend><MiniBars data={spendData} stacked /></Panel><Panel title="Weekly CPC" legend><MiniBars data={cpcData} /></Panel></div><div className="table-grid"><DataTable title="Session source" rows={[['Bing ads', '703', '870', '429', '128', '18.21%'], ['Facebook', '654', '800', '419', '125', '19.11%'], ['Google ads', '339', '431', '234', '66', '19.47%'], ['Instagram', '0', '0', '0', '0', '-'], ['LinkedIn', '727', '909', '449', '124', '17.06%']]} headers={['Total users', 'Sessions', 'Engaged sessions', 'Purchases', 'Purchase rate']} /><DataTable title="Ad source" rows={sources.concat(['Snapchat ads', 'TikTok ads']).map((name, i) => [name, String(224 - i * 3), `${(67.4 - i * .8).toFixed(1)}K`, String(851 - i * 18), `0.${26 + (i % 2)}`, (3.32 + i * .04).toFixed(2), `${(1.26 - i * .03).toFixed(2)}%`])} headers={['Ad spend', 'Impressions', 'Clicks', 'CPC', 'CPM', 'CTR']} /></div></section><aside className="filter-panel"><div className="filter-title">Report date</div><div className="date-row"><span>3/8/2025 <CalendarDays size={12} /></span><span>5/7/2025 <CalendarDays size={12} /></span></div><div className="range"><i /><i /></div>{['Ad source', 'Ad campaign', 'Session source', 'Session campaign'].map(label => <label className="select-filter" key={label}>{label}<button>All <ChevronDown size={15} /></button></label>)}<div className="help-card"><div><b>Have questions?</b><a>Dashboard setup guide</a><a>Book a demo</a><a>Contact support</a></div><CircleHelp size={36} /></div></aside></div><div className="analytics-footer">Connect 70+ data sources with Findora</div>
+  </div>;
 }
 
-function MetricCard({ title, value, icon: Icon }: any) {
-  return (
-    <div className="metric-card">
-      <div className="flex justify-between items-start mb-4">
-        <div className="p-2 bg-findora-purple/10 rounded-lg text-findora-purple">
-          <Icon size={20} />
-        </div>
-      </div>
-      <h3 className="text-sm font-medium text-slate-500">{title}</h3>
-      <p className="text-2xl font-bold text-slate-800 mt-1">{value}</p>
-    </div>
-  );
-}
+function compact(value: number) { return value > 999 ? `${(value / 1000).toFixed(1)}K` : value.toLocaleString(); }
+function Metric({ label, value, tone }: { label: string; value: string; tone: number }) { return <div className={`ppc-metric tone-${tone}`}><span>{label}</span><b>{value}</b></div>; }
+function Panel({ title, legend, children }: { title: string; legend?: boolean; children: React.ReactNode }) { return <article className="ppc-panel"><h2>{title}</h2>{legend && <div className="chart-legend">{sources.map((source, i) => <span key={source}><i style={{ background: sourceColors[i] }} />{source}</span>)}</div>}{children}</article>; }
+function MiniBars({ data, stacked = false }: { data: any[]; stacked?: boolean }) { return <ResponsiveContainer width="100%" height={130}><BarChart data={data} barGap={1}><XAxis dataKey="w" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} /><YAxis width={22} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} /><Tooltip /><Bar dataKey="Bing" fill={sourceColors[0]} stackId={stacked ? 'spend' : undefined} /><Bar dataKey="Google" fill={sourceColors[1]} stackId={stacked ? 'spend' : undefined} /><Bar dataKey="LinkedIn" fill={sourceColors[2]} stackId={stacked ? 'spend' : undefined} /><Bar dataKey="Meta" fill={sourceColors[3]} stackId={stacked ? 'spend' : undefined} /></BarChart></ResponsiveContainer>; }
+function DataTable({ title, headers, rows }: { title: string; headers: string[]; rows: string[][] }) { return <article className="data-table"><div className="data-table-scroll"><table><thead><tr><th>{title}</th>{headers.map(header => <th key={header}>{header}</th>)}</tr></thead><tbody>{rows.map((row, i) => <tr key={row[0]}>{row.map((cell, n) => <td key={`${cell}-${n}`} className={n > 0 && n < row.length - 1 && i % 2 === 0 ? 'heat' : ''}>{n === 0 && <span className="expand">+</span>}{cell}</td>)}</tr>)}</tbody></table></div></article>; }

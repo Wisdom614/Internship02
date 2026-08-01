@@ -6,6 +6,7 @@ import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
 import CreateCampaign from './pages/CreateCampaign';
 import Analytics from './pages/Analytics';
+import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Search from './pages/Search';
 
@@ -69,13 +70,14 @@ function App() {
     <BrowserRouter>
       <div className="flex min-h-screen bg-findora-gray">
         <Sidebar />
-        <div className="flex-1 ml-64">
+        <div className="flex-1 md:ml-64">
           <Header />
-          <main className="p-8">
+          <main className="p-4 md:p-8">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/campaigns" element={<CreateCampaign />} />
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/settings" element={<Settings />} />
               <Route path="/login" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

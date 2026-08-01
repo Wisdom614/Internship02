@@ -42,3 +42,15 @@ entrypoint = "./functions/track-pixel/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/track-pixel/*.html" ]
+
+[functions.track-event]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/track-event/index.ts"
+
+[functions.verify-site]
+enabled = true
+verify_jwt = false
+import_map = "./functions/verify-site/deno.json"
+entrypoint = "./functions/verify-site/index.ts"
+# static_files = [ "./functions/verify-site/*.html" ]

@@ -1,55 +1,44 @@
-// findora/public/tracker.js
-(function() {
-  // 1. Check if there is a click_id in the URL (e.g., ?click_id=xyz)
-  const urlParams = new URLSearchParams(window.location.search);
-  const clickId = urlParams.get('click_id');
-  
-  // If no click_id, this is organic traffic. We don't track it for campaigns.
+/* Findora campaign pixel. Add this script to every page of a campaign website. */
+(function () {
+  var api = 'https://kdncxluglavhsygdxmio.supabase.co/functions/v1';
+  var params = new URLSearchParams(window.location.search);
+  var clickId = params.get('click_id') || sessionStorage.getItem('findora_click_id');
   if (!clickId) return;
 
-  const startTime = Date.now();
-  const supabaseUrl = 'https://kdncxluglavhsygdxmio.supabase.co';
-  const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkbmN4bHVnbGF2aHN5Z2R4bWlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NTAwNTUsImV4cCI6MjEwMTEyNjA1NX0.r276oG2aY2ZhFuBZgn3clgcbhMK7IYURDiaMQk-HMLM';
+  sessionStorage.setItem('findora_click_id', clickId);
+  var sessionId = sessionStorage.getItem('findora_session_id');
+  if (!sessionId) {
+    sessionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random();
+    sessionStorage.setItem('findora_session_id', sessionId);
+  }
+  var pageStartedAt = Date.now();
+  var sentExit = false;
 
-  // 2. Send a "Page View" to the page_views table
-  async function trackPageView() {
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/page_views`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify({
-          click_id: clickId,
-          url: window.location.href
-        })
-      });
-    } catch (e) {
-      // Silently fail so we don't break the user's website
+  function send(path, body, beacon) {
+    var payload = JSON.stringify(body);
+    if (beacon && navigator.sendBeacon) {
+      return navigator.sendBeacon(api + path, new Blob([payload], { type: 'application/json' }));
     }
+    return fetch(api + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(function () {});
   }
 
-  // 3. Send "Time Spent" when the user leaves or closes the tab
-  async function trackExit() {
-    const duration = Math.floor((Date.now() - startTime) / 1000);
-    if (duration < 1) return; // Don't track bounces of less than 1 second
-
-    try {
-      // Note: We use navigator.sendBeacon because fetch might get cancelled on page unload
-      const data = JSON.stringify({
-        click_id: clickId,
-        duration_seconds: duration
-      });
-      navigator.sendBeacon(`${supabaseUrl}/functions/v1/track-exit`, data);
-    } catch (e) {
-      // Silently fail
-    }
+  function pageView() {
+    return send('/track-pixel', { click_id: clickId, session_id: sessionId, url: location.href, page_path: location.pathname + location.search });
+  }
+  function exit() {
+    if (sentExit) return;
+    sentExit = true;
+    send('/track-exit', { click_id: clickId, session_id: sessionId, duration_seconds: Math.max(0, Math.round((Date.now() - pageStartedAt) / 1000)) }, true);
+  }
+  function track(eventName, options) {
+    options = options || {};
+    return send('/track-event', { click_id: clickId, session_id: sessionId, event_name: eventName, url: location.href, value: options.value, event_data: options.data || {} });
   }
 
-  // 4. Run the tracking functions
-  trackPageView();
-  window.addEventListener('beforeunload', trackExit);
+  window.Findora = window.Findora || {};
+  window.Findora.track = track;
+  window.Findora.trackPurchase = function (revenue, purchaseId) { return track('purchase', { value: revenue, data: { purchase_id: purchaseId || null } }); };
+  pageView();
+  window.addEventListener('pagehide', exit);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') exit(); });
 })();

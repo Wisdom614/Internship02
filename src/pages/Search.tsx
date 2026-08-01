@@ -1,319 +1,174 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Search, Loader2, ExternalLink, Globe, AlertCircle, Info, PlusCircle } from 'lucide-react';
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  Check,
+  Compass,
+  ExternalLink,
+  Info,
+  Loader2,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  X,
+} from 'lucide-react';
+
+type Campaign = {
+  id: string;
+  name: string;
+  daily_budget: number;
+  keywords: string[] | null;
+  target_audience: string | null;
+  sites: any;
+  relevanceScore: number;
+  budgetScore: number;
+  totalScore: number;
+};
+
+const trendingSearches = ['Running shoes', 'Home fitness', 'Travel essentials', 'Smart home', 'Skincare'];
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedQuery = query.trim();
+  const searchFor = async (value: string) => {
+    const trimmedQuery = value.trim();
     if (!trimmedQuery) return;
 
     setLoading(true);
     setSearched(true);
     setResults([]);
     setError(null);
-
-    // Split search query into individual keywords
-    const searchTerms = trimmedQuery.toLowerCase().split(' ').filter(t => t.length > 1);
+    const searchTerms = trimmedQuery.toLowerCase().split(/\s+/).filter(term => term.length > 1);
 
     try {
-      // Fetch all active, verified campaigns
       const { data, error: fetchError } = await supabase
         .from('campaigns')
-        .select(`
-          id,
-          name,
-          daily_budget,
-          keywords,
-          target_audience,
-          sites ( url, verified )
-        `)
+        .select('id, name, daily_budget, keywords, target_audience, sites!inner ( url, verified )')
         .eq('status', 'active')
         .not('daily_budget', 'is', null)
         .gt('daily_budget', 0)
-        .eq('sites.verified', true); // <--- CRITICAL: ONLY show verified sites!
+        .eq('sites.verified', true);
 
       if (fetchError) throw fetchError;
 
-      // --- THE RANKING ALGORITHM STARTS HERE ---
-      const rankedResults = data
-        ?.map(campaign => {
+      const rankedResults = (data ?? [])
+        .map(campaign => {
           let relevanceScore = 0;
           const campaignKeywords = campaign.keywords || [];
-
-          // 1. Calculate Relevance Match (Exact matches get higher points)
-          searchTerms.forEach(term => {
-            campaignKeywords.forEach((kw: string) => {
-              const lowerKw = kw.toLowerCase();
-              if (lowerKw === term) {
-                relevanceScore += 10; // Exact match!
-              } else if (lowerKw.includes(term)) {
-                relevanceScore += 5; // Partial match
-              }
-            });
-          });
-
-          // 2. Calculate Budget Score (Higher budget = higher score, but dampened so it doesn't overpower relevance)
+          searchTerms.forEach(term => campaignKeywords.forEach((keyword: string) => {
+            const lowerKeyword = keyword.toLowerCase();
+            relevanceScore += lowerKeyword === term ? 10 : lowerKeyword.includes(term) ? 5 : 0;
+          }));
           const budgetScore = (campaign.daily_budget || 0) / 5;
-
-          // 3. Total Rank Score
-          const totalScore = relevanceScore + budgetScore;
-
-          return {
-            ...campaign,
-            relevanceScore,
-            budgetScore,
-            totalScore
-          };
+          return { ...campaign, relevanceScore, budgetScore, totalScore: relevanceScore + budgetScore };
         })
-        .filter(campaign => campaign.totalScore > 0) // Only show campaigns that actually matched
-        .sort((a, b) => b.totalScore - a.totalScore); // Sort by highest total score
-
-      setResults(rankedResults || []);
-    } catch (err: any) {
-      console.error("Search error:", err);
-      setError("Failed to fetch results. Please try again later.");
+        .filter(campaign => campaign.totalScore > 0)
+        .sort((a, b) => b.totalScore - a.totalScore) as Campaign[];
+      setResults(rankedResults);
+    } catch (err) {
+      console.error('Search error:', err);
+      setError('We couldn’t complete that search. Please try again in a moment.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVisitSite = (campaignId: string, siteUrl: string) => {
-    if (!siteUrl) return alert("No destination URL set.");
-    const clickUrl = `https://kdncxluglavhsygdxmio.supabase.co/functions/v1/redirect-click?cid=${campaignId}`;
-    window.open(clickUrl, '_blank');
+  const handleSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    void searchFor(query);
   };
 
   const handleQuickSearch = (term: string) => {
     setQuery(term);
-    // Manually trigger a search after a small delay
-    setTimeout(() => {
-      const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-      handleSearch(fakeEvent);
-    }, 100);
+    void searchFor(term);
+  };
+
+  const handleVisitSite = (campaignId: string, siteUrl?: string) => {
+    if (!siteUrl) return;
+    window.open(`https://kdncxluglavhsygdxmio.supabase.co/functions/v1/redirect-click?cid=${campaignId}`, '_blank');
   };
 
   return (
-    <div className="min-h-screen bg-findora-gray flex flex-col">
-      
-      {/* --- TOP CLEAN NAV BAR --- */}
-      <header className="w-full border-b border-slate-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
-        <div 
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-        >
-          <div className="w-8 h-8 bg-findora-purple rounded-lg flex items-center justify-center text-white font-bold text-lg">F</div>
-          <h1 className="text-xl font-bold text-findora-dark tracking-tight hidden sm:block">Findora</h1>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setShowAbout(true)}
-            className="flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-findora-purple transition-colors"
-          >
-            <Info size={16} />
-            <span className="hidden sm:inline">About</span>
+    <div className="min-h-screen overflow-hidden bg-[#f7f7f4] text-[#17211d]">
+      <header className="relative z-20 border-b border-white/10 bg-[#14251e] text-white">
+        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-2.5" aria-label="Findora home">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#d9ff6c] text-lg font-black text-[#173126]">F</span>
+            <span className="text-lg font-semibold tracking-[-0.04em]">findora</span>
           </button>
-          <a 
-            href="/login"
-            className="flex items-center gap-1.5 text-sm font-medium bg-findora-purple/10 text-findora-purple px-4 py-2 rounded-lg hover:bg-findora-purple/20 transition-colors"
-          >
-            <PlusCircle size={16} />
-            <span className="hidden sm:inline">List Your Site</span>
-            <span className="sm:hidden">Advertise</span>
-          </a>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setShowAbout(true)} className="hidden items-center gap-2 px-3 py-2 text-sm text-white/70 transition hover:text-white sm:flex">
+              <Info size={16} /> How it works
+            </button>
+            <a href="/login" className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#173126] transition hover:bg-[#d9ff6c] sm:px-5">
+              List your business <ArrowUpRight className="ml-1 inline" size={15} />
+            </a>
+          </div>
         </div>
       </header>
 
-      {/* --- MAIN CONTENT --- */}
-      <main className="flex-1 flex flex-col items-center px-4 pt-12 pb-16 w-full max-w-4xl mx-auto">
-        <div className="w-full space-y-8">
-          
-          {/* Hero Header */}
-          <div className="text-center space-y-4">
-            <div className="flex items-center justify-center gap-3 mb-2">
-              <div className="w-16 h-16 bg-findora-purple rounded-2xl flex items-center justify-center text-white font-bold text-4xl shadow-lg shadow-findora-purple/20">
-                F
-              </div>
+      <main>
+        <section className="relative isolate overflow-hidden bg-[#14251e] px-5 pb-16 pt-14 text-white sm:px-8 sm:pb-20 sm:pt-20">
+          <div className="absolute -right-24 top-[-130px] h-[380px] w-[380px] rounded-full bg-[#7bbf5a]/20 blur-3xl" />
+          <div className="absolute -bottom-36 left-[12%] h-[260px] w-[260px] rounded-full bg-[#d9ff6c]/10 blur-3xl" />
+          <div className="relative mx-auto max-w-4xl text-center">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.07] px-3 py-1.5 text-xs font-medium text-white/75">
+              <Sparkles size={14} className="text-[#d9ff6c]" /> Curated businesses, worth discovering
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold text-findora-dark tracking-tight">Findora</h1>
-            <p className="text-slate-500 text-lg max-w-md mx-auto">
-              Discover the best websites. Search by keyword to find top-rated advertisers.
-            </p>
+            <h1 className="mx-auto max-w-3xl text-4xl font-semibold tracking-[-0.055em] sm:text-6xl">The good stuff is easier to find.</h1>
+            <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-white/65 sm:text-lg">Search a thoughtful collection of trusted businesses, products, and services — matched to what you need.</p>
+
+            <form onSubmit={handleSearch} className="mx-auto mt-9 max-w-3xl text-left">
+              <div className="group flex items-center rounded-2xl border border-white/10 bg-white p-2 shadow-2xl shadow-black/20 transition focus-within:ring-4 focus-within:ring-[#d9ff6c]/20">
+                <Search className="ml-3 shrink-0 text-[#6c786f]" size={22} />
+                <input value={query} onChange={event => setQuery(event.target.value)} placeholder="What are you looking for?" className="min-w-0 flex-1 bg-transparent px-4 py-3 text-base text-[#17211d] outline-none placeholder:text-[#919a94]" />
+                <button type="submit" disabled={loading || !query.trim()} className="inline-flex items-center gap-2 rounded-xl bg-[#d9ff6c] px-4 py-3 font-semibold text-[#173126] transition hover:bg-[#cafa4f] disabled:cursor-not-allowed disabled:opacity-50 sm:px-6">
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : <><span className="hidden sm:inline">Search</span><Search className="sm:hidden" size={18} /></>}
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-sm text-white/55">
+                <span className="mr-1 hidden sm:inline">Popular:</span>
+                {trendingSearches.map(term => <button key={term} type="button" onClick={() => handleQuickSearch(term)} className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/80 transition hover:border-[#d9ff6c] hover:bg-white/10 hover:text-[#d9ff6c]">{term}</button>)}
+              </div>
+            </form>
           </div>
+        </section>
 
-          {/* Main Search Bar */}
-          <form onSubmit={handleSearch} className="relative max-w-2xl mx-auto">
-            <div className="relative flex items-center bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 pl-5 transition-all focus-within:ring-4 focus-within:ring-findora-purple/10 focus-within:border-findora-purple">
-              <Search className="text-slate-400 flex-shrink-0" size={22} />
-              <input 
-                type="text" 
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search for websites... (e.g. 'shoes', 'sneakers')"
-                className="flex-1 px-4 py-3 outline-none text-slate-700 bg-transparent placeholder:text-slate-400"
-              />
-              <button 
-                type="submit" 
-                disabled={loading}
-                className="bg-findora-purple text-white px-6 py-3 rounded-xl font-medium hover:bg-findora-purple/90 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 shadow-md shadow-findora-purple/20"
-              >
-                {loading ? <Loader2 className="animate-spin" size={18} /> : 'Search'}
-              </button>
-            </div>
-          </form>
-
-          {/* --- QUICK SEARCH CHIPS --- */}
-          <div className="flex flex-wrap justify-center gap-2 mt-2">
-            <span className="text-xs text-slate-400 mr-1 self-center">Quick search:</span>
-            {['sneakers', 'shoes', 'running', 'boots', 'sports'].map((term) => (
-              <button
-                key={term}
-                onClick={() => handleQuickSearch(term)}
-                className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full text-xs transition-colors"
-              >
-                {term}
-              </button>
-            ))}
-          </div>
-
-          {/* Results Area */}
-          <div className="space-y-4 min-h-[200px] pt-4">
-            
-            {/* Loading State */}
-            {loading && (
-              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                <Loader2 className="animate-spin mb-3" size={32} />
-                <p>Searching for relevant websites...</p>
-              </div>
-            )}
-
-            {/* Error State */}
-            {error && !loading && (
-              <div className="text-center py-12 bg-red-50 rounded-xl border border-red-100">
-                <AlertCircle className="mx-auto text-red-500 mb-3" size={48} />
-                <h3 className="text-lg font-medium text-red-700">Oops! Something went wrong</h3>
-                <p className="text-red-500 text-sm">{error}</p>
-              </div>
-            )}
-
-            {/* No Results State */}
-            {!loading && !error && searched && results.length === 0 && (
-              <div className="text-center py-16 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                <Globe className="mx-auto text-slate-300 mb-4" size={56} />
-                <h3 className="text-xl font-medium text-slate-700">No advertisers found</h3>
-                <p className="text-slate-400 text-sm max-w-xs mx-auto mt-1">
-                  Try a different keyword. Advertisers must set matching keywords to appear in search results.
-                </p>
-              </div>
-            )}
-
-            {/* Results List */}
-            {!loading && !error && results.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                  <p className="text-sm text-slate-500 font-medium">
-                    Found <span className="text-findora-purple font-bold">{results.length}</span> relevant advertiser{results.length > 1 ? 's' : ''}
-                  </p>
-                  <p className="text-xs text-slate-400">Ranked by relevance + ad budget</p>
-                </div>
-
-                {results.map((campaign, index) => (
-                  <div key={campaign.id} className="bg-white rounded-xl border border-slate-100 shadow-sm p-6 hover:shadow-md transition-all duration-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative">
-                    
-                    {/* Ad Rank Badge */}
-                    <div className="absolute -top-2 -left-2 bg-findora-purple text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm opacity-70">
-                      #{index + 1}
-                    </div>
-
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-findora-dark">{campaign.name}</h3>
-                      
-                      {/* Score Breakdown (Excellent for debugging and demos) */}
-                      <div className="flex flex-wrap gap-4 mt-1 text-[10px] text-slate-400">
-                        <span>Relevance: <span className="text-findora-purple font-bold">{campaign.relevanceScore}</span></span>
-                        <span>Budget: <span className="text-findora-green font-bold">{campaign.budgetScore}</span></span>
-                        <span>Total Rank: <span className="text-slate-800 font-bold">{campaign.totalScore}</span></span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {campaign.keywords?.slice(0, 5).map((kw: string, i: number) => (
-                          <span key={i} className="text-xs bg-slate-50 border border-slate-200 text-slate-600 px-2.5 py-1 rounded-full">
-                            {kw}
-                          </span>
-                        ))}
-                        {campaign.keywords?.length > 5 && (
-                          <span className="text-xs text-slate-400 px-2.5 py-1">
-                            +{campaign.keywords.length - 5} more
-                          </span>
-                        )}
-                      </div>
-
-                      {campaign.target_audience && (
-                        <p className="text-xs text-findora-purple font-medium mt-2 flex items-center gap-1">
-                          <span className="text-slate-400">Target:</span> {campaign.target_audience}
-                        </p>
-                      )}
-                    </div>
-                    
-                    <button 
-                      onClick={() => handleVisitSite(campaign.id, campaign.sites?.url)}
-                      className="flex items-center gap-2 bg-findora-green/10 text-findora-green px-5 py-2.5 rounded-lg font-medium hover:bg-findora-green/20 transition-colors whitespace-nowrap"
-                    >
-                      Visit Site
-                      <ExternalLink size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <section className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
+          {!searched && !loading && <DiscoverState onSearch={handleQuickSearch} />}
+          {loading && <div className="flex min-h-72 flex-col items-center justify-center text-center"><Loader2 className="animate-spin text-[#315f49]" size={34} /><p className="mt-4 font-medium">Looking through our collection...</p><p className="mt-1 text-sm text-[#748078]">Finding the most relevant businesses for you.</p></div>}
+          {error && !loading && <div className="rounded-3xl border border-red-100 bg-white p-10 text-center shadow-sm"><p className="font-semibold text-red-700">Search unavailable</p><p className="mt-2 text-sm text-slate-500">{error}</p><button onClick={() => void searchFor(query)} className="mt-5 rounded-full bg-[#173126] px-5 py-2.5 text-sm font-semibold text-white">Try again</button></div>}
+          {!loading && !error && searched && results.length === 0 && <EmptyState query={query} onSearch={handleQuickSearch} />}
+          {!loading && !error && results.length > 0 && <Results results={results} query={query} onVisit={handleVisitSite} />}
+        </section>
       </main>
 
-      {/* --- ABOUT MODAL --- */}
-      {showAbout && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative animate-in zoom-in-95 duration-200">
-            <button 
-              onClick={() => setShowAbout(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
-            >
-              ✕
-            </button>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-findora-purple rounded-lg flex items-center justify-center text-white font-bold text-lg">F</div>
-              <h2 className="text-xl font-bold text-findora-dark">About Findora</h2>
-            </div>
-            <div className="space-y-3 text-sm text-slate-600">
-              <p>
-                <strong className="text-slate-800">Findora</strong> is a semi-search engine that connects users with top-rated advertisers.
-              </p>
-              <p>
-                <strong>For Advertisers:</strong> Register your site, set a daily budget, and choose keywords. We'll display your site to relevant searchers.
-              </p>
-              <p>
-                <strong>For Searchers:</strong> Search for specific keywords (like "shoes" or "sports") and discover the best advertisers, sorted by their daily budget and relevance.
-              </p>
-              <div className="pt-2 border-t border-slate-100 mt-2">
-                <a 
-                  href="/login" 
-                  className="inline-block w-full text-center bg-findora-purple text-white py-2 rounded-lg font-medium hover:bg-findora-purple/90 transition-colors"
-                >
-                  Start Advertising Today
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <footer className="border-t border-[#dfe3dd] px-5 py-7 sm:px-8"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-3 text-sm text-[#758078] sm:flex-row"><span>© 2026 Findora. Search with confidence.</span><span className="flex items-center gap-2"><ShieldCheck size={15} className="text-[#315f49]" /> Every result is a verified business</span></div></footer>
+
+      {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
     </div>
   );
+}
+
+function DiscoverState({ onSearch }: { onSearch: (term: string) => void }) {
+  const categories = [['Style', 'Fashion, beauty & everyday essentials'], ['Move', 'Fitness, outdoors & sport'], ['Live', 'Home, tech & thoughtful upgrades']];
+  return <div><div className="mb-7 flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#5d7567]">Start exploring</p><h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">Find something exceptional</h2></div><Compass className="hidden text-[#315f49] sm:block" size={26} /></div><div className="grid gap-4 md:grid-cols-3">{categories.map(([title, description], index) => <button key={title} onClick={() => onSearch(title)} className="group rounded-2xl border border-[#e0e5de] bg-white p-5 text-left shadow-[0_2px_1px_rgba(22,33,28,.02)] transition hover:-translate-y-1 hover:border-[#b4c9b8] hover:shadow-lg"><div className="mb-8 grid h-10 w-10 place-items-center rounded-xl bg-[#e8f2e8] font-semibold text-[#315f49]">0{index + 1}</div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm leading-5 text-[#758078]">{description}</p><span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-[#315f49]">Explore <ArrowUpRight size={15} /></span></button>)}</div></div>;
+}
+
+function Results({ results, query, onVisit }: { results: Campaign[]; query: string; onVisit: (id: string, url?: string) => void }) {
+  return <div><div className="mb-6 flex flex-col justify-between gap-2 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#5d7567]">Search results</p><h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">{results.length} {results.length === 1 ? 'match' : 'matches'} for “{query}”</h2></div><p className="text-sm text-[#758078]">Ranked by relevance</p></div><div className="space-y-3">{results.map((campaign, index) => <article key={campaign.id} className="group rounded-2xl border border-[#e0e5de] bg-white p-5 transition hover:border-[#b4c9b8] hover:shadow-lg sm:p-6"><div className="flex flex-col gap-5 sm:flex-row sm:items-center"><div className="flex min-w-0 flex-1 gap-4"><span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e8f2e8] text-sm font-bold text-[#315f49]">{String(index + 1).padStart(2, '0')}</span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-lg font-semibold tracking-[-0.02em]">{campaign.name}</h3><span className="inline-flex items-center gap-1 rounded-full bg-[#e8f2e8] px-2 py-0.5 text-[11px] font-semibold text-[#315f49]"><BadgeCheck size={13} /> Verified</span></div>{campaign.target_audience && <p className="mt-1 text-sm text-[#69756d]">Recommended for {campaign.target_audience}</p>}<div className="mt-3 flex flex-wrap gap-1.5">{campaign.keywords?.slice(0, 4).map(keyword => <span key={keyword} className="rounded-full bg-[#f3f5f2] px-2.5 py-1 text-xs text-[#607067]">{keyword}</span>)}</div></div></div><button onClick={() => onVisit(campaign.id, campaign.sites?.url)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#173126] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#315f49]">Visit site <ExternalLink size={16} /></button></div></article>)}</div></div>;
+}
+
+function EmptyState({ query, onSearch }: { query: string; onSearch: (term: string) => void }) {
+  return <div className="rounded-3xl border border-[#e0e5de] bg-white px-6 py-14 text-center shadow-sm"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#e8f2e8] text-[#315f49]"><Search size={25} /></div><h2 className="mt-5 text-xl font-semibold">Nothing quite matches “{query}”</h2><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#758078]">Try a broader search or explore one of our popular topics.</p><div className="mt-6 flex flex-wrap justify-center gap-2">{trendingSearches.slice(0, 3).map(term => <button key={term} onClick={() => onSearch(term)} className="rounded-full border border-[#dce3dc] px-3 py-2 text-xs font-medium text-[#315f49] hover:bg-[#e8f2e8]">{term}</button>)}</div></div>;
+}
+
+function AboutModal({ onClose }: { onClose: () => void }) {
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-[#102019]/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="About Findora"><div className="relative w-full max-w-md rounded-3xl bg-white p-7 shadow-2xl"><button onClick={onClose} className="absolute right-5 top-5 rounded-full p-2 text-[#69756d] hover:bg-[#f1f3f0]" aria-label="Close"><X size={18} /></button><div className="grid h-11 w-11 place-items-center rounded-xl bg-[#d9ff6c] font-black text-[#173126]">F</div><h2 className="mt-5 text-2xl font-semibold tracking-[-0.04em]">Find better, faster.</h2><p className="mt-3 text-sm leading-6 text-[#69756d]">Findora connects people with relevant businesses that have been verified before they appear in search.</p><div className="mt-6 space-y-3 border-t border-[#e7ebe5] pt-5 text-sm">{['Search by need, product, or interest', 'Explore verified business recommendations', 'Visit directly from a trusted result'].map(item => <div key={item} className="flex items-center gap-3"><span className="grid h-5 w-5 place-items-center rounded-full bg-[#e8f2e8] text-[#315f49]"><Check size={13} /></span>{item}</div>)}</div><a href="/login" className="mt-7 block rounded-xl bg-[#173126] py-3 text-center text-sm font-semibold text-white">List your business</a></div></div>;
 }

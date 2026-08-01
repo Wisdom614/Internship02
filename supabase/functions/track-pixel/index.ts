@@ -1,30 +1,19 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-Deno.serve(async (req) => {
+const url = Deno.env.get('SUPABASE_URL')!;
+const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
+
+Deno.serve(async req => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   try {
-    const { click_id, url } = await req.json();
-    
-    if (!click_id) {
-      return new Response('Missing click_id', { status: 400 });
-    }
-
-    // The ANON_KEY is safely stored in Supabase's environment variables, not in the script!
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? 'https://kdncxluglavhsygdxmio.supabase.co',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkbmN4bHVnbGF2aHN5Z2R4bWlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NTAwNTUsImV4cCI6MjEwMTEyNjA1NX0.r276oG2aY2ZhFuBZgn3clgcbhMK7IYURDiaMQk-HMLM'
-    );
-
-    const { error } = await supabase
-      .from('page_views')
-      .insert({ click_id: click_id, url: url });
-
-    if (error) {
-      console.error(error);
-      return new Response('Error saving page view', { status: 500 });
-    }
-
-    return new Response('Page view tracked!', { status: 200 });
-  } catch (error) {
-    return new Response('Invalid request', { status: 400 });
-  }
+    const { click_id, session_id, url: pageUrl, page_path } = await req.json();
+    if (!click_id || !session_id || !pageUrl) return new Response('Missing tracking data', { status: 400, headers: cors });
+    const client = createClient(url, key);
+    const { data: click } = await client.from('clicks').select('id').eq('click_id', click_id).maybeSingle();
+    if (!click) return new Response('Unknown click', { status: 404, headers: cors });
+    const { error } = await client.from('page_views').insert({ click_id, session_id, url: pageUrl, page_path, event_name: 'page_view', ip_address: req.headers.get('x-forwarded-for') || null, user_agent: req.headers.get('user-agent') || null, referrer: req.headers.get('referer') || null });
+    if (error) throw error;
+    return new Response(null, { status: 204, headers: cors });
+  } catch (error) { console.error(error); return new Response('Unable to record page view', { status: 400, headers: cors }); }
 });

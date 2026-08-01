@@ -1,372 +1,53 @@
 import { useEffect, useState } from 'react';
+import { Check, ChevronRight, CircleDollarSign, Copy, Globe2, Loader2, Plus, Tag, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Copy, ExternalLink, Check, Loader2, Globe, ShieldCheck } from 'lucide-react';
+
+type Campaign = { id: string; name: string; status: 'active' | 'paused' | 'pending'; daily_budget: number; keywords: string[] | null; target_audience: string | null; created_at: string; sites: { id: string; url: string; verified: boolean; verification_token: string | null } | null };
+const emptyForm = { campaignName: '', siteUrl: '', dailyBudget: '', keywords: '', targetAudience: '' };
 
 export default function CreateCampaign() {
-  const [campaignId, setCampaignId] = useState<string | null>(null);
-  const [clickLink, setClickLink] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Form state
   const [showForm, setShowForm] = useState(false);
-  const [campaignName, setCampaignName] = useState('');
-  const [siteUrl, setSiteUrl] = useState('');
-  const [dailyBudget, setDailyBudget] = useState('');
-  const [keywords, setKeywords] = useState('');
-  const [targetAudience, setTargetAudience] = useState('');
-  
+  const [form, setForm] = useState(emptyForm);
   const [creating, setCreating] = useState(false);
-  const [trackingScript, setTrackingScript] = useState<string | null>(null);
-  const [verificationToken, setVerificationToken] = useState<string | null>(null);
+  const [created, setCreated] = useState<Campaign | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  // Automatically fetch the real Campaign ID from the database on load
-  useEffect(() => {
-    fetchCampaigns();
-  }, []);
-
-  const fetchCampaigns = async () => {
+  const loadCampaigns = async () => {
     setLoading(true);
-    
-    // Get the user's first active campaign
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
-
-    const { data, error } = await supabase
-      .from('campaigns')
-      .select('id, name')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .limit(1)
-      .single();
-
-    if (error && error.code !== 'PGRST116') {
-      console.error("Error fetching campaign:", error);
-      setLoading(false);
-      return;
-    }
-
-    if (data) {
-      setCampaignId(data.id);
-      setShowForm(false);
-    } else {
-      setCampaignId(null);
-      setShowForm(true);
-    }
-    setLoading(false);
+    if (!user) return;
+    const { data } = await supabase.from('campaigns').select('id, name, status, daily_budget, keywords, target_audience, created_at, sites(id, url, verified, verification_token)').eq('user_id', user.id).order('created_at', { ascending: false });
+    setCampaigns((data as any) ?? []); setLoading(false);
   };
+  useEffect(() => { void loadCampaigns(); }, []);
+  const update = (field: keyof typeof emptyForm, value: string) => setForm(current => ({ ...current, [field]: value }));
 
-  const generateTrackingScript = (_campId: string, campName: string) => {
-    return `
-<!-- Findora Tracking Pixel for ${campName} -->
-<script>
-(function() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const clickId = urlParams.get('click_id');
-  
-  if (!clickId) return;
-
-  const startTime = Date.now();
-  const FINDORA_API = 'https://kdncxluglavhsygdxmio.supabase.co/functions/v1';
-
-  fetch(\`\${FINDORA_API}/track-pixel\`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ click_id: clickId, url: window.location.href })
-  });
-
-  window.addEventListener('beforeunload', () => {
-    const duration = Math.floor((Date.now() - startTime) / 1000);
-    navigator.sendBeacon(\`\${FINDORA_API}/track-exit\`, JSON.stringify({ click_id: clickId, duration_seconds: duration }));
-  });
-})();
-</script>
-<!-- End Findora Pixel -->
-  `.trim();
-  };
-
-  const handleCreateCampaign = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!campaignName || !siteUrl || !dailyBudget) return;
-
-    setCreating(true);
-    
+  const createCampaign = async (event: React.FormEvent) => {
+    event.preventDefault(); setCreating(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      alert("You must be logged in to create a campaign.");
-      setCreating(false);
-      return;
-    }
-
-    const keywordArray = keywords.split(',').map(k => k.trim()).filter(k => k);
-    // Generate a random 6-character uppercase verification token
+    if (!user) { setCreating(false); return; }
     const verifyToken = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-    // 1. Insert Site (Default verified = false, stores the token)
-    const { data: siteData, error: siteError } = await supabase
-      .from('sites')
-      .insert({ 
-        url: siteUrl, 
-        verified: false,
-        user_id: user.id,
-        verification_token: verifyToken // <--- Stores the token for later verification
-      })
-      .select('id');
-
-    if (siteError || !siteData || siteData.length === 0) {
-      console.error("Site creation error:", siteError);
-      alert("Failed to create site.");
-      setCreating(false);
-      return;
-    }
-
-    // 2. Insert Campaign
-    const { data: campaignData, error: campError } = await supabase
-      .from('campaigns')
-      .insert({ 
-        site_id: siteData[0].id,
-        user_id: user.id,
-        name: campaignName, 
-        daily_budget: parseFloat(dailyBudget),
-        keywords: keywordArray,
-        target_audience: targetAudience || null,
-        budget: 100.00, 
-        status: 'pending' // Starts as pending until verified!
-      })
-      .select('id, name')
-      .single();
-
-    if (campError || !campaignData) {
-      console.error("Campaign creation error:", campError);
-      alert("Failed to create campaign.");
-      setCreating(false);
-      return;
-    }
-
-    // 3. Generate Tracking Script
-    const script = generateTrackingScript(campaignData.id, campaignData.name);
-    setTrackingScript(script);
-    setVerificationToken(verifyToken); // Save token to show to user
-    setCampaignId(campaignData.id);
-    
-    setCreating(false);
-    setShowForm(false);
+    const { data: site, error: siteError } = await supabase.from('sites').insert({ url: form.siteUrl, user_id: user.id, verified: false, verification_token: verifyToken }).select('id, url, verified, verification_token').single();
+    if (siteError || !site) { alert('Unable to add your website. Please try again.'); setCreating(false); return; }
+    const { data, error } = await supabase.from('campaigns').insert({ site_id: site.id, user_id: user.id, name: form.campaignName, daily_budget: Number(form.dailyBudget), keywords: form.keywords.split(',').map(item => item.trim()).filter(Boolean), target_audience: form.targetAudience || null, budget: 100, status: 'pending' }).select('id, name, status, daily_budget, keywords, target_audience, created_at').single();
+    if (error || !data) { alert('Unable to create campaign. Please try again.'); setCreating(false); return; }
+    const newCampaign = { ...data, sites: site } as Campaign;
+    setCampaigns(current => [newCampaign, ...current]); setCreated(newCampaign); setForm(emptyForm); setShowForm(false); setCreating(false);
   };
+  const copy = async (value: string) => { await navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
-  const handleGenerateLink = () => {
-    if (!campaignId) return;
-    const link = `https://kdncxluglavhsygdxmio.supabase.co/functions/v1/redirect-click?cid=${campaignId}`;
-    setClickLink(link);
-  };
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    } catch (err) {
-      alert('Failed to copy!');
-    }
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-findora-dark">Launch Campaign</h1>
-          <p className="text-slate-500 text-sm mt-1">
-            {showForm ? "Register your website and create your first campaign." : "Manage your active campaigns."}
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-8">
-        <div className="flex flex-col gap-6">
-          
-          <div className="flex items-center gap-4 pb-6 border-b border-slate-100">
-            <div className="p-3 bg-findora-purple/10 rounded-lg text-findora-purple">
-              {showForm ? <Globe size={24} /> : <ExternalLink size={24} />}
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">
-                {showForm ? "Create Your Campaign" : "Campaign Generator"}
-              </h2>
-              <p className="text-sm text-slate-500">
-                {loading ? "Loading campaigns..." : (showForm ? "Enter your website details and target keywords." : "Generate a live tracking link for your active campaign.")}
-              </p>
-            </div>
-          </div>
-
-          {loading && (
-            <div className="flex items-center justify-center py-12 text-slate-400">
-              <Loader2 className="animate-spin mr-2" size={20} />
-              Loading...
-            </div>
-          )}
-
-          {/* CREATE CAMPAIGN FORM */}
-          {!loading && showForm && (
-            <form onSubmit={handleCreateCampaign} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Campaign Name</label>
-                  <input 
-                    type="text" required value={campaignName}
-                    onChange={(e) => setCampaignName(e.target.value)}
-                    placeholder="e.g. Summer Sale 2026"
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-findora-purple/20 focus:border-findora-purple"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Daily Budget ($)</label>
-                  <input 
-                    type="number" required value={dailyBudget}
-                    onChange={(e) => setDailyBudget(e.target.value)}
-                    placeholder="e.g. 50"
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-findora-purple/20 focus:border-findora-purple"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Destination Website URL</label>
-                <input 
-                  type="url" required value={siteUrl}
-                  onChange={(e) => setSiteUrl(e.target.value)}
-                  placeholder="e.g. https://www.myshop.com"
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-findora-purple/20 focus:border-findora-purple"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Target Keywords <span className="text-slate-400 font-normal">(comma separated)</span></label>
-                  <input 
-                    type="text" value={keywords}
-                    onChange={(e) => setKeywords(e.target.value)}
-                    placeholder="e.g. sneakers, shoes, nike"
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-findora-purple/20 focus:border-findora-purple"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Target Audience <span className="text-slate-400 font-normal">(Optional)</span></label>
-                  <input 
-                    type="text" value={targetAudience}
-                    onChange={(e) => setTargetAudience(e.target.value)}
-                    placeholder="e.g. Men aged 18-35"
-                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-findora-purple/20 focus:border-findora-purple"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button 
-                  type="submit" 
-                  disabled={creating}
-                  className="w-full sm:w-auto bg-findora-green text-white px-6 py-2.5 rounded-lg hover:bg-findora-green/90 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {creating ? <Loader2 className="animate-spin" size={18} /> : "Register & Create Campaign"}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* TRACKING SCRIPT + VERIFICATION SUCCESS */}
-          {!loading && !showForm && trackingScript && (
-            <div className="mt-4 space-y-4">
-              
-              {/* Verification Instructions */}
-              {verificationToken && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-                  <div className="flex items-start gap-3">
-                    <ShieldCheck className="text-amber-600 mt-1" size={20} />
-                    <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-amber-800 mb-1">Step 1: Verify Your Website</h3>
-                      <p className="text-xs text-amber-700 mb-3">
-                        To activate your campaign and start receiving traffic, you must prove you own this website. 
-                        <br />Copy the meta tag below and paste it inside the <strong>&lt;head&gt;</strong> section of your website's homepage.
-                      </p>
-                      <div className="bg-white p-3 rounded border border-amber-200 overflow-x-auto text-xs font-mono text-slate-700 mb-3">
-                        {`<meta name="findora-verify" content="${verificationToken}">`}
-                      </div>
-                      <button 
-                        onClick={() => copyToClipboard(`<meta name="findora-verify" content="${verificationToken}">`)}
-                        className="flex items-center gap-2 bg-amber-600 text-white px-3 py-1.5 rounded text-xs hover:bg-amber-700 transition-colors"
-                      >
-                        {copied ? <Check size={14} /> : <Copy size={14} />}
-                        {copied ? 'Copied!' : 'Copy Meta Tag'}
-                      </button>
-                      <p className="text-xs text-amber-600 mt-3">
-                        <strong>Next step:</strong> Once added, go to your Dashboard and click <strong>"Verify"</strong> on your campaign.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tracking Script */}
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
-                <h3 className="text-sm font-semibold text-blue-800 mb-2">
-                  Step 2: Install Tracking Pixel
-                </h3>
-                <div className="bg-slate-900 text-slate-200 p-4 rounded-lg overflow-x-auto text-xs font-mono whitespace-pre-wrap mb-4 max-h-48 overflow-y-auto">
-                  {trackingScript}
-                </div>
-                <button 
-                  onClick={() => copyToClipboard(trackingScript)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors"
-                >
-                  Copy Script to Clipboard
-                </button>
-                <p className="text-xs text-blue-600 mt-3">
-                  Place this code inside the <strong>&lt;head&gt;</strong> tag of every page on your website.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* LINK GENERATOR (Only if already verified and active) */}
-          {!loading && !showForm && campaignId && !trackingScript && (
-            <div className="space-y-4">
-              <button 
-                onClick={handleGenerateLink}
-                className="w-full sm:w-auto bg-findora-purple text-white px-8 py-3 rounded-lg hover:bg-findora-purple/90 transition-colors font-medium shadow-sm shadow-findora-purple/20 flex items-center justify-center gap-2"
-              >
-                Generate Tracking Link
-              </button>
-
-              {clickLink && (
-                <div className="mt-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Your Campaign Tracking URL
-                  </label>
-                  <div className="flex flex-col sm:flex-row gap-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="flex-1 truncate font-mono text-sm text-slate-700 p-2 bg-white rounded border border-slate-100 break-all">
-                      {clickLink}
-                    </div>
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => window.open(clickLink, '_blank')}
-                        className="flex items-center justify-center gap-2 px-4 py-2 text-slate-600 bg-white border border-slate-200 rounded-lg hover:text-findora-purple hover:border-findora-purple/50 transition-colors"
-                      >
-                        <ExternalLink size={16} />
-                        <span className="text-xs font-medium">Visit</span>
-                      </button>
-                      <button 
-                        onClick={() => copyToClipboard(clickLink)}
-                        className="flex items-center justify-center gap-2 px-4 py-2 text-findora-purple bg-findora-purple/10 rounded-lg hover:bg-findora-purple/20 transition-colors"
-                      >
-                        {copied ? <Check size={16} /> : <Copy size={16} />}
-                        <span className="text-xs font-medium">{copied ? 'Copied!' : 'Copy'}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="mx-auto max-w-6xl pb-8">
+    <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-[#5d7567]">Campaign manager</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.045em] text-[#17211d]">Campaigns that find their people.</h1><p className="mt-2 text-sm text-[#758078]">Create, verify, and manage every destination from one place.</p></div><button onClick={() => { setCreated(null); setShowForm(true); }} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#173126] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#315f49]"><Plus size={18} /> Create campaign</button></section>
+    {created && <section className="mt-7 rounded-2xl border border-[#cce5cf] bg-[#eff9f0] p-5"><div className="flex gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#d9ff6c] text-[#173126]"><Check size={19} /></span><div className="flex-1"><h2 className="font-semibold">{created.name} is ready for verification</h2><p className="mt-1 text-sm text-[#47704d]">Add both snippets to the head of your destination website, then select Verify from the campaign list.</p><InstallSnippet label="1. Website verification" value={`<meta name="findora-verify" content="${created.sites?.verification_token}">`} copied={copied} onCopy={copy} /><InstallSnippet label="2. Findora tracking pixel" value={`<script src="${window.location.origin}/tracker.js" defer></script>`} copied={copied} onCopy={copy} /></div><button onClick={() => setCreated(null)} className="self-start text-[#47704d]"><X size={18} /></button></div></section>}
+    <section className="mt-8 overflow-hidden rounded-2xl border border-[#e0e5de] bg-white"><div className="flex items-center justify-between border-b border-[#e9ece8] px-6 py-5"><div><h2 className="font-semibold text-[#17211d]">All campaigns</h2><p className="mt-1 text-sm text-[#78847c]">{campaigns.length} campaign{campaigns.length === 1 ? '' : 's'} in your workspace</p></div><span className="hidden rounded-full bg-[#e8f2e8] px-3 py-1.5 text-xs font-semibold text-[#315f49] sm:block">{campaigns.filter(item => item.status === 'active').length} active</span></div>{loading ? <div className="flex justify-center py-16 text-[#78847c]"><Loader2 className="animate-spin" /></div> : campaigns.length === 0 ? <Empty onCreate={() => setShowForm(true)} /> : <div className="divide-y divide-[#edf0eb]">{campaigns.map(campaign => <CampaignRow key={campaign.id} campaign={campaign} onVerified={loadCampaigns} />)}</div>}</section>
+    {showForm && <CampaignModal form={form} update={update} creating={creating} onClose={() => setShowForm(false)} onSubmit={createCampaign} />}
+  </div>;
 }
+
+function CampaignRow({ campaign, onVerified }: { campaign: Campaign; onVerified: () => Promise<void> }) { const [verifying, setVerifying] = useState(false); const verified = campaign.sites?.verified; const status = verified ? campaign.status : 'pending'; const verify = async () => { if (!campaign.sites) return; setVerifying(true); const { data: { session } } = await supabase.auth.getSession(); const response = await fetch('https://kdncxluglavhsygdxmio.supabase.co/functions/v1/verify-site', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` }, body: JSON.stringify({ site_id: campaign.sites.id, url: campaign.sites.url, token: campaign.sites.verification_token, campaign_id: campaign.id }) }); const result = await response.json(); if (!response.ok) alert(result.message || 'Verification failed.'); else { alert(result.message); await onVerified(); } setVerifying(false); }; return <article className="flex flex-col gap-4 px-6 py-5 transition hover:bg-[#fbfcfa] sm:flex-row sm:items-center"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e8f2e8] text-[#315f49]"><Globe2 size={20} /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-[#17211d]">{campaign.name}</h3><Status status={status} /></div><p className="mt-1 truncate text-sm text-[#78847c]">{campaign.sites?.url || 'Website pending'}</p><div className="mt-3 flex flex-wrap gap-1.5">{campaign.keywords?.slice(0, 4).map(item => <span key={item} className="rounded-full bg-[#f2f4f1] px-2 py-1 text-[11px] text-[#647268]">{item}</span>)}</div></div><div className="flex items-center justify-between gap-4 border-t border-[#edf0eb] pt-3 sm:border-0 sm:pt-0"><div><p className="text-xs text-[#849088]">Daily budget</p><p className="mt-1 flex items-center gap-1 font-semibold text-[#17211d]"><CircleDollarSign size={15} className="text-[#315f49]" />{Number(campaign.daily_budget).toFixed(2)}</p></div>{!verified ? <button onClick={() => void verify()} disabled={verifying} className="inline-flex items-center gap-1 rounded-lg bg-[#173126] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">{verifying && <Loader2 size={14} className="animate-spin" />} Verify</button> : <span className="inline-flex items-center gap-1 text-sm font-semibold text-[#315f49]">Live <ChevronRight size={16} /></span>}</div></article>; }
+function InstallSnippet({ label, value, copied, onCopy }: { label: string; value: string; copied: boolean; onCopy: (value: string) => Promise<void> }) { return <div className="mt-4"><p className="text-xs font-semibold text-[#47704d]">{label}</p><div className="mt-2 flex flex-col gap-2 rounded-xl border border-[#cde0cf] bg-white p-3 sm:flex-row sm:items-center"><code className="flex-1 overflow-x-auto text-xs text-[#315f49]">{value}</code><button onClick={() => void onCopy(value)} className="inline-flex items-center justify-center gap-1 rounded-lg bg-[#173126] px-3 py-2 text-xs font-semibold text-white"><Copy size={14} /> {copied ? 'Copied' : 'Copy'}</button></div></div>; }
+function Status({ status }: { status: string }) { const config = status === 'active' ? 'bg-[#e8f2e8] text-[#315f49]' : status === 'paused' ? 'bg-[#f2f3f1] text-[#667169]' : 'bg-[#fff3d9] text-[#936b24]'; return <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${config}`}>{status === 'pending' ? 'Needs verification' : status}</span>; }
+function Empty({ onCreate }: { onCreate: () => void }) { return <div className="px-6 py-16 text-center"><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#e8f2e8] text-[#315f49]"><Tag size={21} /></span><h3 className="mt-4 font-semibold">Create your first campaign</h3><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#78847c]">Add a destination, budget, and the keywords that best describe what you offer.</p><button onClick={onCreate} className="mt-5 rounded-xl bg-[#173126] px-4 py-2.5 text-sm font-semibold text-white">Create campaign</button></div>; }
+function CampaignModal({ form, update, creating, onClose, onSubmit }: { form: typeof emptyForm; update: (field: keyof typeof emptyForm, value: string) => void; creating: boolean; onClose: () => void; onSubmit: (event: React.FormEvent) => void }) { const fields: { key: keyof typeof emptyForm; label: string; placeholder: string; type?: string; hint?: string }[] = [{ key: 'campaignName', label: 'Campaign name', placeholder: 'Summer collection' }, { key: 'dailyBudget', label: 'Daily budget', placeholder: '50', type: 'number', hint: 'USD' }, { key: 'siteUrl', label: 'Destination website', placeholder: 'https://yourwebsite.com', type: 'url' }, { key: 'keywords', label: 'Target keywords', placeholder: 'fashion, linen, summer', hint: 'Separate with commas' }, { key: 'targetAudience', label: 'Target audience', placeholder: 'e.g. Style-conscious shoppers', hint: 'Optional' }]; return <div className="fixed inset-0 z-50 grid place-items-center bg-[#102019]/45 p-4 backdrop-blur-sm"><form onSubmit={onSubmit} className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8"><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-[#5d7567]">New campaign</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Set up your campaign</h2><p className="mt-2 text-sm text-[#78847c]">You can add as many campaigns as your business needs.</p></div><button type="button" onClick={onClose} className="rounded-full p-2 text-[#748078] hover:bg-[#f1f3f0]"><X size={19} /></button></div><div className="mt-7 grid gap-4 sm:grid-cols-2">{fields.map(field => <label key={field.key} className={field.key === 'siteUrl' ? 'sm:col-span-2' : ''}><span className="mb-2 flex justify-between text-sm font-semibold text-[#36463d]">{field.label}<em className="not-italic text-xs font-normal text-[#849088]">{field.hint}</em></span><input type={field.type || 'text'} required={field.key !== 'targetAudience' && field.key !== 'keywords'} min={field.key === 'dailyBudget' ? '1' : undefined} value={form[field.key]} onChange={event => update(field.key, event.target.value)} placeholder={field.placeholder} className="w-full rounded-xl border border-[#dce2db] px-3.5 py-3 text-sm outline-none transition placeholder:text-[#a1aaa3] focus:border-[#315f49] focus:ring-4 focus:ring-[#315f49]/10" /></label>)}</div><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-3 text-sm font-semibold text-[#667169]">Cancel</button><button type="submit" disabled={creating} className="inline-flex items-center gap-2 rounded-xl bg-[#173126] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">{creating && <Loader2 className="animate-spin" size={17} />} Create campaign</button></div></form></div>; }
