@@ -7,13 +7,31 @@ interface VerificationResponse {
   isVerified?: boolean;
   error?: string;
   message?: string;
-  data?: any;
+  data?: unknown;
 }
 
 interface SendResponse {
   success: boolean;
   error?: string;
-  data?: any;
+  data?: unknown;
+}
+
+async function readResponse(response: Response): Promise<Record<string, unknown>> {
+  const body = await response.text();
+
+  try {
+    return body ? JSON.parse(body) as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function responseMessage(data: Record<string, unknown>, fallback: string): string {
+  return typeof data.message === 'string'
+    ? data.message
+    : typeof data.detail === 'string'
+      ? data.detail
+      : fallback;
 }
 
 export const emailVerification = {
@@ -28,14 +46,14 @@ export const emailVerification = {
         body: JSON.stringify({ email })
       });
       
-      const data = await response.json();
+      const data = await readResponse(response);
       
-      if (data.status === 'success') {
+      if (response.ok && (data.status === 'success' || data.success === true)) {
         // Store email for resend functionality
         localStorage.setItem('pendingVerificationEmail', email);
         return { success: true, data };
       } else {
-        return { success: false, error: data.message || 'Failed to send verification email' };
+        return { success: false, error: responseMessage(data, 'Failed to send verification email') };
       }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Network error' };
@@ -48,19 +66,19 @@ export const emailVerification = {
   async verify(token: string): Promise<VerificationResponse> {
     try {
       const response = await fetch(`${API_URL}/verify?token=${encodeURIComponent(token)}`);
-      const data = await response.json();
+      const data = await readResponse(response);
       
-      if (data.success) {
+      if (response.ok && data.success === true) {
         return { 
           success: true, 
-          email: data.email, 
+          email: typeof data.email === 'string' ? data.email : undefined,
           isVerified: true,
-          message: data.message 
+          message: responseMessage(data, 'Email verified successfully')
         };
       } else {
         return { 
           success: false, 
-          error: data.message || 'Verification failed',
+          error: responseMessage(data, 'Verification failed'),
           isVerified: false 
         };
       }
@@ -79,20 +97,20 @@ export const emailVerification = {
   async checkStatus(email: string): Promise<VerificationResponse> {
     try {
       const response = await fetch(`${API_URL}/status/${encodeURIComponent(email)}`);
-      const data = await response.json();
+      const data = await readResponse(response);
       
-      if (data.success) {
+      if (response.ok && data.success === true) {
         return {
           success: true,
-          email: data.email,
-          isVerified: data.is_verified,
-          message: data.message
+          email: typeof data.email === 'string' ? data.email : undefined,
+          isVerified: data.is_verified === true,
+          message: responseMessage(data, 'Verification status retrieved')
         };
       } else {
         return {
           success: false,
           isVerified: false,
-          error: data.message || 'Failed to check status'
+          error: responseMessage(data, 'Failed to check status')
         };
       }
     } catch (error) {
@@ -115,12 +133,12 @@ export const emailVerification = {
         body: JSON.stringify({ email })
       });
       
-      const data = await response.json();
+      const data = await readResponse(response);
       
-      if (data.status === 'success') {
+      if (response.ok && (data.status === 'success' || data.success === true)) {
         return { success: true, data };
       } else {
-        return { success: false, error: data.message || 'Failed to resend verification' };
+        return { success: false, error: responseMessage(data, 'Failed to resend verification') };
       }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Network error' };

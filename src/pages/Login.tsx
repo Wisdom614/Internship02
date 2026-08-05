@@ -61,9 +61,12 @@ export default function Login() {
         const result = await emailVerification.send(email);
         
         if (!result.success) {
-          // If email fails, we should still let the user know but log the error
           console.error('Failed to send verification email:', result.error);
-          // Don't throw here - user is created, just inform them
+          setMessage({
+            text: `Your account was created, but we could not send the verification email: ${result.error || 'Unknown error'}. Please try again later.`,
+            type: 'error'
+          });
+          return;
         }
         
         setMessage({ 
