@@ -46,7 +46,7 @@ export default function Login() {
     try {
       if (mode === 'signup') {
         // 1. Create user in Supabase (without sending their email)
-        const { data, error: supabaseError } = await supabase.auth.signUp({
+        const { error: supabaseError } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -72,10 +72,7 @@ export default function Login() {
         });
         
       } else if (mode === 'signin') {
-        // Sign in - check if email is verified first
-        const { data: userData } = await supabase.auth.getUser();
-        
-        // Check verification status using your API
+        // Check verification status using your API before signing in.
         const status = await emailVerification.checkStatus(email);
         
         if (status.success && !status.isVerified) {
