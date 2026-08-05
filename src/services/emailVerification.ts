@@ -1,26 +1,137 @@
+// src/services/emailVerification.ts
 const API_URL = 'https://email-verification-api-852478308269.us-central1.run.app';
 
-async function request(path: string, options?: RequestInit) {
-  const response = await fetch(`${API_URL}${path}`, options);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || data.error || 'Email verification service is unavailable.');
-  return data;
+interface VerificationResponse {
+  success: boolean;
+  email?: string;
+  isVerified?: boolean;
+  error?: string;
+  message?: string;
+  data?: any;
+}
+
+interface SendResponse {
+  success: boolean;
+  error?: string;
+  data?: any;
 }
 
 export const emailVerification = {
-  async send(email: string) {
-    const data = await request('/request-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
-    if (data.status !== 'success') throw new Error(data.message || 'Unable to send the verification email.');
-    return data;
+  /**
+   * Send verification email to a user
+   */
+  async send(email: string): Promise<SendResponse> {
+    try {
+      const response = await fetch(`${API_URL}/request-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      
+      if (data.status === 'success') {
+        // Store email for resend functionality
+        localStorage.setItem('pendingVerificationEmail', email);
+        return { success: true, data };
+      } else {
+        return { success: false, error: data.message || 'Failed to send verification email' };
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Network error' };
+    }
   },
-  async verify(token: string) {
-    const data = await request(`/verify?token=${encodeURIComponent(token)}`);
-    if (!data.success) throw new Error(data.message || 'The verification link is invalid or expired.');
-    return data;
+
+  /**
+   * Verify email with token from the email link
+   */
+  async verify(token: string): Promise<VerificationResponse> {
+    try {
+      const response = await fetch(`${API_URL}/verify?token=${encodeURIComponent(token)}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        return { 
+          success: true, 
+          email: data.email, 
+          isVerified: true,
+          message: data.message 
+        };
+      } else {
+        return { 
+          success: false, 
+          error: data.message || 'Verification failed',
+          isVerified: false 
+        };
+      }
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Network error',
+        isVerified: false 
+      };
+    }
   },
-  async resend(email: string) {
-    const data = await request('/resend-verification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
-    if (data.status !== 'success') throw new Error(data.message || 'Unable to resend the verification email.');
-    return data;
+
+  /**
+   * Check verification status for an email
+   */
+  async checkStatus(email: string): Promise<VerificationResponse> {
+    try {
+      const response = await fetch(`${API_URL}/status/${encodeURIComponent(email)}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        return {
+          success: true,
+          email: data.email,
+          isVerified: data.is_verified,
+          message: data.message
+        };
+      } else {
+        return {
+          success: false,
+          isVerified: false,
+          error: data.message || 'Failed to check status'
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        isVerified: false,
+        error: error instanceof Error ? error.message : 'Network error'
+      };
+    }
   },
+
+  /**
+   * Resend verification email
+   */
+  async resend(email: string): Promise<SendResponse> {
+    try {
+      const response = await fetch(`${API_URL}/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      
+      if (data.status === 'success') {
+        return { success: true, data };
+      } else {
+        return { success: false, error: data.message || 'Failed to resend verification' };
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Network error' };
+    }
+  },
+
+  /**
+   * Get token from URL (for the verification page)
+   */
+  getTokenFromURL(): string | null {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('token');
+  }
 };
