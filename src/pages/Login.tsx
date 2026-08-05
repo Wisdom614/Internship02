@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Eye, EyeOff, Loader2, LockKeyhole, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { emailVerification } from '../services/emailVerification';
@@ -20,6 +20,7 @@ function errorMessage(error: unknown): string {
 }
 
 export default function Login() {
+  const navigate = useNavigate();
   const [session, setSession] = useState<any>(null);
   const [mode, setMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
@@ -91,10 +92,7 @@ export default function Login() {
         await supabase.auth.signOut();
         isCreatingAccount.current = false;
         
-        setMessage({ 
-          text: 'Account created. Check your inbox for a verification email from Findora.', 
-          type: 'success' 
-        });
+        navigate('/verify', { state: { email } });
         
       } else if (mode === 'signin') {
         // Check verification status using your API before signing in.

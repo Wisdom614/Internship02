@@ -40,7 +40,7 @@ export const emailVerification = {
    */
   async send(email: string): Promise<SendResponse> {
     try {
-      const response = await fetch(`${API_URL}/request-verification`, {
+      const response = await fetch(`${API_URL}/request-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
@@ -91,6 +91,28 @@ export const emailVerification = {
     }
   },
 
+  async verifyOtp(email: string, code: string): Promise<VerificationResponse> {
+    try {
+      const response = await fetch(`${API_URL}/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code })
+      });
+      const data = await readResponse(response);
+      if (response.ok && data.success === true) {
+        return {
+          success: true,
+          email: typeof data.email === 'string' ? data.email : undefined,
+          isVerified: true,
+          message: responseMessage(data, 'Email verified successfully')
+        };
+      }
+      return { success: false, isVerified: false, error: responseMessage(data, 'Verification failed') };
+    } catch (error) {
+      return { success: false, isVerified: false, error: error instanceof Error ? error.message : 'Network error' };
+    }
+  },
+
   /**
    * Check verification status for an email
    */
@@ -127,7 +149,7 @@ export const emailVerification = {
    */
   async resend(email: string): Promise<SendResponse> {
     try {
-      const response = await fetch(`${API_URL}/resend-verification`, {
+      const response = await fetch(`${API_URL}/resend-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
