@@ -48,6 +48,16 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/track-event/index.ts"
 
+[functions.search-campaigns]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/search-campaigns/index.ts"
+
+[functions.ai-search-overview]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ai-search-overview/index.ts"
+
 [functions.verify-site]
 enabled = true
 verify_jwt = false

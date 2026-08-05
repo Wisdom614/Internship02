@@ -13,6 +13,7 @@
   }
   var pageStartedAt = Date.now();
   var sentExit = false;
+  var lastRecordedSeconds = 0;
 
   function send(path, body, beacon) {
     var payload = JSON.stringify(body);
@@ -25,10 +26,16 @@
   function pageView() {
     return send('/track-pixel', { click_id: clickId, session_id: sessionId, url: location.href, page_path: location.pathname + location.search });
   }
+  function recordDuration(final) {
+    var seconds = Math.max(0, Math.round((Date.now() - pageStartedAt) / 1000));
+    if (!final && seconds === lastRecordedSeconds) return;
+    lastRecordedSeconds = seconds;
+    send('/track-exit', { click_id: clickId, session_id: sessionId, duration_seconds: seconds, url: location.href, page_path: location.pathname + location.search }, final);
+  }
   function exit() {
     if (sentExit) return;
     sentExit = true;
-    send('/track-exit', { click_id: clickId, session_id: sessionId, duration_seconds: Math.max(0, Math.round((Date.now() - pageStartedAt) / 1000)) }, true);
+    recordDuration(true);
   }
   function track(eventName, options) {
     options = options || {};
@@ -39,6 +46,9 @@
   window.Findora.track = track;
   window.Findora.trackPurchase = function (revenue, purchaseId) { return track('purchase', { value: revenue, data: { purchase_id: purchaseId || null } }); };
   pageView();
+  // Do not rely solely on pagehide: some browsers terminate background pages
+  // before a final network request can complete.
+  window.setInterval(function () { recordDuration(false); }, 10000);
   window.addEventListener('pagehide', exit);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') exit(); });
 })();
