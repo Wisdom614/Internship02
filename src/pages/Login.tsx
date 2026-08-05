@@ -67,7 +67,7 @@ export default function Login() {
           password,
           options: {
             // ⚠️ IMPORTANT: Disable Supabase's email confirmation
-            emailRedirectTo: `${window.location.origin}/verify`,
+            emailRedirectTo: undefined,
           }
         });
         
