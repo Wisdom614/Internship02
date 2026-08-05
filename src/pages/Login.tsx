@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { ArrowLeft, Check, Eye, EyeOff, Loader2, LockKeyhole, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -6,6 +6,18 @@ import { emailVerification } from '../services/emailVerification';
 
 type AuthMode = 'signin' | 'signup' | 'reset';
 type Message = { text: string; type: 'success' | 'error' } | null;
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error) return error;
+  if (error && typeof error === 'object') {
+    const details = error as Record<string, unknown>;
+    for (const key of ['message', 'detail', 'error_description', 'error']) {
+      if (typeof details[key] === 'string' && details[key]) return details[key] as string;
+    }
+  }
+  return 'We could not complete that request. Please try again.';
+}
 
 export default function Login() {
   const [session, setSession] = useState<any>(null);
@@ -16,10 +28,13 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<Message>(null);
+  const isCreatingAccount = useRef(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!isCreatingAccount.current) setSession(nextSession);
+    });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -45,6 +60,7 @@ export default function Login() {
     
     try {
       if (mode === 'signup') {
+        isCreatingAccount.current = true;
         // 1. Create user in Supabase (without sending their email)
         const { error: supabaseError } = await supabase.auth.signUp({
           email,
@@ -73,6 +89,7 @@ export default function Login() {
         // immediately. Sign it out so this user must verify before they can use
         // the application.
         await supabase.auth.signOut();
+        isCreatingAccount.current = false;
         
         setMessage({ 
           text: 'Account created. Check your inbox for a verification email from Findora.', 
@@ -111,13 +128,11 @@ export default function Login() {
       }
       
     } catch (error) {
-      setMessage({ 
-        text: error instanceof Error ? error.message : 'We could not complete that request.', 
-        type: 'error' 
-      });
+      setMessage({ text: errorMessage(error), type: 'error' });
+    } finally {
+      isCreatingAccount.current = false;
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   // Rest of your component remains the same...
