@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { ArrowLeft, Check, Eye, EyeOff, Loader2, LockKeyhole, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { emailVerification } from '../services/emailVerification';
 
 type AuthMode = 'signin' | 'signup' | 'reset';
 type Message = { text: string; type: 'success' | 'error' } | null;
@@ -39,15 +40,18 @@ export default function Login() {
       return;
     }
     setLoading(true);
-    const result = mode === 'signin'
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : mode === 'signup'
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/login` });
-
-    setMessage(result.error
-      ? { text: result.error.message, type: 'error' }
-      : { text: mode === 'signin' ? 'Welcome back. You are signed in.' : mode === 'signup' ? 'Account created. Check your inbox to verify your email.' : 'If an account exists for that email, we sent a recovery link.', type: 'success' });
+    try {
+      if (mode === 'signup') {
+        const result = await supabase.auth.signUp({ email, password });
+        if (result.error) throw result.error;
+        await emailVerification.send(email);
+        setMessage({ text: 'Account created. Check your inbox for a verification email from Findora.', type: 'success' });
+      } else {
+        const result = mode === 'signin' ? await supabase.auth.signInWithPassword({ email, password }) : await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/login` });
+        if (result.error) throw result.error;
+        setMessage({ text: mode === 'signin' ? 'Welcome back. You are signed in.' : 'If an account exists for that email, we sent a recovery link.', type: 'success' });
+      }
+    } catch (error) { setMessage({ text: error instanceof Error ? error.message : 'We could not complete that request.', type: 'error' }); }
     setLoading(false);
   };
 

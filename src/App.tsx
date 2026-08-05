@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Search from './pages/Search';
 import AdminDashboard from './pages/AdminDashboard'; // <--- Import the Admin Dashboard
 import Payments from './pages/Payments';
+import VerifyEmail from './pages/VerifyEmail';
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -63,6 +64,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Search />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/verify" element={<VerifyEmail />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
@@ -84,6 +86,7 @@ function App() {
               <Route path="/payments" element={<Payments />} />
               <Route path="/admin" element={<AdminDashboard />} /> {/* <--- The Admin Route */}
               <Route path="/login" element={<Navigate to="/" replace />} />
+              <Route path="/verify" element={<VerifyEmail />} />
             </Routes>
           </main>
         </div>
