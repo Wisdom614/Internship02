@@ -53,6 +53,11 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/search-campaigns/index.ts"
 
+[functions.admin-management]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/admin-management/index.ts"
+
 
 [functions.verify-site]
 enabled = true

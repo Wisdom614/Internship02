@@ -13,12 +13,12 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 min-h-20 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10 gap-3">
+    <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 sm:min-h-20 sm:px-6 md:px-8">
       <div>
-        <p className="text-sm text-slate-500">Advertiser Dashboard</p>
-        <h2 className="text-xl font-semibold text-slate-800">Performance overview</h2>
+        <p className="text-xs text-slate-500 sm:text-sm">Advertiser Dashboard</p>
+        <h2 className="text-lg font-semibold text-slate-800 sm:text-xl">Performance overview</h2>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-4">
         <button className="hidden sm:inline-flex items-center gap-2 text-slate-600 border border-slate-200 rounded-full px-4 py-2 hover:border-findora-purple hover:text-findora-purple transition-colors">
           <CalendarDays size={18} />
           <span>{dateRange}</span>

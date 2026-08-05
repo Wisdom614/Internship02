@@ -74,9 +74,9 @@ function App() {
     <BrowserRouter>
       <div className="flex min-h-screen bg-findora-gray">
         <Sidebar />
-        <div className="flex-1 ml-64">
+        <div className="min-w-0 flex-1 md:ml-64">
           <Header />
-          <main className="p-8">
+          <main className="p-4 pb-24 sm:p-6 sm:pb-24 md:p-8 md:pb-8">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/campaigns" element={<CreateCampaign />} />
