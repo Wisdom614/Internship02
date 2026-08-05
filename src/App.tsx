@@ -1,28 +1,30 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
 import CreateCampaign from './pages/CreateCampaign';
 import Analytics from './pages/Analytics';
-import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Search from './pages/Search';
+import AdminDashboard from './pages/AdminDashboard'; // <--- Import the Admin Dashboard
+import Payments from './pages/Payments';
 
 function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // FALLBACK: If Supabase hangs for more than 1 second, just show the search page anyway
+    // Create a timeout - if Supabase hangs, we stop loading after 1.5 seconds and show the Search page
     const timeoutId = setTimeout(() => {
-      console.log("Supabase timed out. Bypassing auth and loading Search.");
+      console.warn("Supabase auth timed out. Loading public search page.");
       setLoading(false);
-    }, 1000);
+    }, 1500);
 
+    // Attempt to get the session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      clearTimeout(timeoutId);
+      clearTimeout(timeoutId); // Cancel the timeout if Supabase responds
       setSession(session);
       setLoading(false);
     }).catch(() => {
@@ -30,7 +32,9 @@ function App() {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setLoading(false);
     });
@@ -52,7 +56,7 @@ function App() {
     );
   }
 
-  // PUBLIC ROUTES
+  // --- PUBLIC ROUTES --- (No Dashboard/Header/Sidebar)
   if (!session) {
     return (
       <BrowserRouter>
@@ -65,19 +69,20 @@ function App() {
     );
   }
 
-  // PRIVATE ROUTES
+  // --- LOGGED IN ROUTES --- (Dashboard, Sidebar, Header)
   return (
     <BrowserRouter>
       <div className="flex min-h-screen bg-findora-gray">
         <Sidebar />
-        <div className="flex-1 md:ml-64">
+        <div className="flex-1 ml-64">
           <Header />
-          <main className="p-4 md:p-8">
+          <main className="p-8">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/campaigns" element={<CreateCampaign />} />
               <Route path="/analytics" element={<Analytics />} />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/payments" element={<Payments />} />
+              <Route path="/admin" element={<AdminDashboard />} /> {/* <--- The Admin Route */}
               <Route path="/login" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

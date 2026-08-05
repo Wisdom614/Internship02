@@ -9,7 +9,7 @@ if (!supabaseKey) {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -46,8 +46,19 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ message: 'This verification request does not match a campaign you own.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const response = await fetch(site.url, {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(site.url);
+    } catch {
+      return new Response(JSON.stringify({ message: 'The saved website URL is invalid.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return new Response(JSON.stringify({ message: 'Only public HTTP(S) websites can be verified.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const response = await fetch(parsedUrl.toString(), {
       method: 'GET',
+      redirect: 'follow',
       headers: {
         'User-Agent': 'Findora-Verification/1.0',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -60,9 +71,16 @@ Deno.serve(async (req) => {
     }
 
     const html = await response.text();
-    const regex = new RegExp(`<meta[^>]*name=["']findora-verify["'][^>]*content=["']${token}["'][^>]*>`, 'i');
+    // Attributes in HTML can appear in any order, so inspect every meta tag
+    // rather than requiring name="..." to come before content="...".
+    const metaTags = html.match(/<meta\b[^>]*>/gi) ?? [];
+    const verified = metaTags.some(tag => {
+      const name = tag.match(/\bname\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase();
+      const content = tag.match(/\bcontent\s*=\s*["']([^"']+)["']/i)?.[1];
+      return name === 'findora-verify' && content === token;
+    });
 
-    if (!regex.test(html)) {
+    if (!verified) {
       return new Response(JSON.stringify({ message: 'Verification token not found in website HTML. Add <meta name="findora-verify" content="TOKEN"> to your <head>.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

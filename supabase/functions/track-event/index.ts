@@ -17,7 +17,7 @@ Deno.serve(async req => {
     if (error) throw error;
     if (event_name === 'purchase') {
       const purchaseId = event_data?.purchase_id || `PIXEL_${crypto.randomUUID()}`;
-      const conversion = await client.from('conversions').insert({ click_id, revenue: Number(value) || 0, purchase_id: String(purchaseId) });
+      const conversion = await client.from('conversions').upsert({ click_id, revenue: Number(value) || 0, purchase_id: String(purchaseId) }, { onConflict: 'purchase_id', ignoreDuplicates: true });
       if (conversion.error) throw conversion.error;
     }
     return new Response(null, { status: 204, headers: cors });

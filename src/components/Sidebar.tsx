@@ -1,10 +1,11 @@
-import { BarChart3, CircleHelp, LayoutDashboard, Megaphone, Search, Settings, Sparkles } from 'lucide-react';
+import { BarChart3, CircleHelp, CreditCard, LayoutDashboard, Megaphone, Search, Settings, Sparkles } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const navigation = [
   { icon: LayoutDashboard, label: 'Overview', path: '/' },
   { icon: Megaphone, label: 'Campaigns', path: '/campaigns' },
   { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+  { icon: CreditCard, label: 'Payments', path: '/payments' },
 ];
 
 export default function Sidebar() {

@@ -27,11 +27,12 @@ Deno.serve(async (req) => {
       return new Response('Campaign not found', { status: 404 });
     }
 
-    if (campaign.status !== 'active' || !campaign.sites?.verified) {
+    const site = Array.isArray(campaign.sites) ? campaign.sites[0] : campaign.sites;
+    if (campaign.status !== 'active' || !site?.verified) {
       return new Response('Campaign is not active or site is not verified', { status: 403 });
     }
 
-    const destinationUrl = campaign.sites.url;
+    const destinationUrl = site.url;
     if (!destinationUrl) {
       return new Response('Destination URL not configured', { status: 400 });
     }
