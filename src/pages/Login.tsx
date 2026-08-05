@@ -68,6 +68,11 @@ export default function Login() {
           });
           return;
         }
+
+        // A Supabase project with email confirmation disabled creates a session
+        // immediately. Sign it out so this user must verify before they can use
+        // the application.
+        await supabase.auth.signOut();
         
         setMessage({ 
           text: 'Account created. Check your inbox for a verification email from Findora.', 

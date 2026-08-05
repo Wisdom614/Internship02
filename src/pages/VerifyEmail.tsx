@@ -99,12 +99,17 @@ export default function VerifyEmail() {
             </Link>
             <button 
               onClick={() => {
-                // Resend verification
+                void (async () => {
                 const email = localStorage.getItem('pendingVerificationEmail') || '';
-                if (email) {
-                  emailVerification.send(email);
-                  setMessage('A new verification email has been sent.');
+                if (!email) {
+                  setMessage('Enter your email on the sign-up page to request a new verification link.');
+                  return;
                 }
+                const result = await emailVerification.resend(email);
+                setMessage(result.success
+                  ? 'A new verification email has been sent.'
+                  : result.error || 'We could not resend the verification email.');
+                })();
               }}
               className="block w-full text-sm text-[#315f49] hover:text-[#173126]"
             >
