@@ -35,6 +35,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [aiOverview, setAiOverview] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiUnavailable, setAiUnavailable] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
 
   const searchFor = async (value: string) => {
@@ -47,13 +48,18 @@ export default function SearchPage() {
     setError(null);
     setAiOverview(null);
     setAiLoading(true);
+    setAiUnavailable(false);
     try {
-      const aiRequest = fetch('https://kdncxluglavhsygdxmio.supabase.co/functions/v1/ai-search-overview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: trimmedQuery }) });
+      const aiRequest = fetch('https://ai.wisedev.online/chat', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer dev-key-1', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: `Give a very short, helpful overview for someone searching for "${trimmedQuery}". Do not invent specific businesses or prices.` }], temperature: 0.7, max_tokens: 300 }),
+      });
       const response = await fetch('https://kdncxluglavhsygdxmio.supabase.co/functions/v1/search-campaigns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: trimmedQuery }) });
       if (!response.ok) throw new Error('Search request failed');
       const payload = await response.json();
       setResults((payload.results ?? []) as Campaign[]);
-      void aiRequest.then(async aiResponse => { if (aiResponse.ok) { const aiPayload = await aiResponse.json(); setAiOverview(aiPayload.overview ?? null); } }).catch(error => console.warn('AI overview unavailable', error)).finally(() => setAiLoading(false));
+      void aiRequest.then(async aiResponse => { if (aiResponse.ok) { const aiPayload = await aiResponse.json(); setAiOverview(aiPayload.response ?? null); } else setAiUnavailable(true); }).catch(error => { console.warn('AI overview unavailable', error); setAiUnavailable(true); }).finally(() => setAiLoading(false));
     } catch (err) {
       console.error('Search error:', err);
       setError('We couldn’t complete that search. Please try again in a moment.');
@@ -127,7 +133,7 @@ export default function SearchPage() {
           {!searched && !loading && <DiscoverState onSearch={handleQuickSearch} />}
           {loading && <div className="flex min-h-72 flex-col items-center justify-center text-center"><Loader2 className="animate-spin text-[#315f49]" size={34} /><p className="mt-4 font-medium">Looking through our collection...</p><p className="mt-1 text-sm text-[#748078]">Finding the most relevant businesses for you.</p></div>}
           {error && !loading && <div className="rounded-3xl border border-red-100 bg-white p-10 text-center shadow-sm"><p className="font-semibold text-red-700">Search unavailable</p><p className="mt-2 text-sm text-slate-500">{error}</p><button onClick={() => void searchFor(query)} className="mt-5 rounded-full bg-[#173126] px-5 py-2.5 text-sm font-semibold text-white">Try again</button></div>}
-          {!loading && !error && searched && <AIOverview text={aiOverview} loading={aiLoading} />}
+          {!loading && !error && searched && <AIOverview text={aiOverview} loading={aiLoading} unavailable={aiUnavailable} />}
           {!loading && !error && searched && results.length === 0 && <EmptyState query={query} onSearch={handleQuickSearch} />}
           {!loading && !error && results.length > 0 && <Results results={results} query={query} onVisit={handleVisitSite} />}
         </section>
@@ -149,9 +155,9 @@ function Results({ results, query, onVisit }: { results: Campaign[]; query: stri
   return <div><div className="mb-6 flex flex-col justify-between gap-2 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#5d7567]">Search results</p><h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">{results.length} {results.length === 1 ? 'match' : 'matches'} for “{query}”</h2></div><p className="text-sm text-[#758078]">Ranked by relevance</p></div><div className="space-y-3">{results.map((campaign, index) => <article key={campaign.id} className="group rounded-2xl border border-[#e0e5de] bg-white p-5 transition hover:border-[#b4c9b8] hover:shadow-lg sm:p-6"><div className="flex flex-col gap-5 sm:flex-row sm:items-center"><div className="flex min-w-0 flex-1 gap-4"><span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e8f2e8] text-sm font-bold text-[#315f49]">{String(index + 1).padStart(2, '0')}</span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate text-lg font-semibold tracking-[-0.02em]">{campaign.name}</h3><span className="inline-flex items-center gap-1 rounded-full bg-[#e8f2e8] px-2 py-0.5 text-[11px] font-semibold text-[#315f49]"><BadgeCheck size={13} /> Verified</span></div>{campaign.target_audience && <p className="mt-1 text-sm text-[#69756d]">Recommended for {campaign.target_audience}</p>}<div className="mt-3 flex flex-wrap gap-1.5">{campaign.keywords?.slice(0, 4).map(keyword => <span key={keyword} className="rounded-full bg-[#f3f5f2] px-2.5 py-1 text-xs text-[#607067]">{keyword}</span>)}</div></div></div><button onClick={() => onVisit(campaign.id, campaign.sites?.url)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#173126] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#315f49]">Visit site <ExternalLink size={16} /></button></div></article>)}</div></div>;
 }
 
-function AIOverview({ text, loading }: { text: string | null; loading: boolean }) {
-  if (!loading && !text) return null;
-  return <section className="mb-6 rounded-2xl border border-[#d8e9df] bg-[#f1f8f2] p-5"><div className="flex items-center gap-2 text-sm font-semibold text-[#315f49]"><Sparkles size={17} /> AI overview</div><p className="mt-2 max-w-3xl text-sm leading-6 text-[#4d6254]">{loading ? 'Thinking about your search…' : text}</p></section>;
+function AIOverview({ text, loading, unavailable }: { text: string | null; loading: boolean; unavailable: boolean }) {
+  if (!loading && !text && !unavailable) return null;
+  return <section className="mb-6 rounded-2xl border border-[#d8e9df] bg-[#f1f8f2] p-5"><div className="flex items-center gap-2 text-sm font-semibold text-[#315f49]"><Sparkles size={17} /> AI overview</div><p className="mt-2 max-w-3xl text-sm leading-6 text-[#4d6254]">{loading ? 'Thinking about your search…' : unavailable ? 'AI overview is temporarily unavailable. Your campaign results are still ranked by relevance.' : text}</p></section>;
 }
 
 function EmptyState({ query, onSearch }: { query: string; onSearch: (term: string) => void }) {
